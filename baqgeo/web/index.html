@@ -3,6 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- La página trae su propio modo oscuro: evita que el navegador invierta los colores. -->
+  <meta name="color-scheme" content="light dark">
   <title>Verde por barrio</title>
   <meta name="description" content="Vegetación e impermeabilidad por barrio en Barranquilla, calculadas con la imagen WorldView Legion 2026.">
   <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css">
@@ -40,6 +42,10 @@
           <option value="falso_color">Imagen 2026, infrarrojo</option>
           <option value="ndvi">NDVI calculado por el servicio</option>
         </select>
+      </label>
+      <label class="control control-rango">
+        <span class="control-etiqueta">Relleno de las zonas</span>
+        <input id="opacidad" type="range" min="0" max="100" step="5" value="80">
       </label>
     </div>
 

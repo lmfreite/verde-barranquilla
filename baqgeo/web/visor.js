@@ -13,20 +13,27 @@ const CONFIG = {
   zoom: 11.5,
 };
 
-// Rampas de 5 pasos ordenadas de menor a mayor valor, validadas como ordinales
-// (lightness monótona, pasos >= 0,06, extremo claro >= 2:1 sobre la superficie).
-// En oscuro el ancla se invierte: los valores bajos se funden con el fondo.
-const RAMPAS = {
-  verde: {
-    claro: ["#6fc373", "#54a859", "#398e40", "#1a7426", "#025915"],
-    oscuro: ["#036819", "#2b8134", "#479c4d", "#62b667", "#7dd281"],
-  },
-  naranja: {
-    claro: ["#f78c51", "#da7134", "#bd5711", "#9a4303", "#763200"],
-    oscuro: ["#893b01", "#ad4d04", "#cc6526", "#e97f44", "#ff9f6d"],
-  },
+// Escala divergente de 5 pasos, de menor a mayor valor: café (poca vegetación),
+// gris (cerca de la mediana) y verde azulado (mucha). Cada brazo está validado
+// como rampa ordinal en claro y oscuro, y café frente a verde azulado se
+// distinguen también con daltonismo (ΔE 11,4 en OKLab). En oscuro los extremos
+// son los más claros, para que resalten sobre el fondo.
+const DIVERGENTE = {
+  claro: ["#925003", "#d08d54", "#dfdeda", "#46b3a6", "#00736a"],
+  oscuro: ["#efa464", "#b6753b", "#494844", "#26998e", "#63ccc0"],
 };
-const SIN_DATO = { claro: "#e1e0d9", oscuro: "#383835" };
+// Pasos de la escala según cuántas clases resulten (los cortes repetidos se descartan).
+const PASOS = { 1: [2], 2: [1, 3], 3: [0, 2, 4], 4: [0, 1, 3, 4], 5: [0, 1, 2, 3, 4] };
+// Zonas sin dato: sin relleno, solo el borde.
+const SIN_DATO = "rgba(0, 0, 0, 0)";
+// Mapa base de OpenStreetMap: no requiere API key, solo la atribución.
+const TESELAS_BASE = ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"];
+// OpenStreetMap no tiene versión oscura: en modo oscuro se atenúa.
+const PINTURA_BASE = {
+  claro: { "raster-brightness-max": 1, "raster-saturation": 0 },
+  oscuro: { "raster-brightness-max": 0.45, "raster-saturation": -0.6 },
+};
+const OPACIDAD = { mapa: 0.8, imagen: 0.2 };
 const SUPERFICIE = { claro: "#fcfcfb", oscuro: "#1a1a19" };
 const PLANO = { claro: "#f9f9f7", oscuro: "#0d0d0d" };
 const TINTA = { claro: "#0b0b0b", oscuro: "#ffffff" };
@@ -37,25 +44,26 @@ const nf2 = new Intl.NumberFormat("es-CO", { minimumFractionDigits: 2, maximumFr
 const pct = (v) => `${nf1.format(v)} %`;
 
 // peorEsBajo: el ranking arranca por la zona en peor situación.
+// invertir: los valores altos son los malos y van en café (impermeable).
 const INDICADORES = {
   pct_vegetacion: {
     titulo: "Vegetación", corto: "% vegetación", unidad: "% del área con vegetación",
-    rampa: "verde", fmt: pct, peorEsBajo: true,
+    invertir: false, fmt: pct, peorEsBajo: true,
     peor: "con menos vegetación", mejor: "con más vegetación",
   },
   pct_impermeable: {
     titulo: "Impermeable", corto: "% impermeable", unidad: "% del área no vegetada",
-    rampa: "naranja", fmt: pct, peorEsBajo: false,
+    invertir: true, fmt: pct, peorEsBajo: false,
     peor: "con más superficie impermeable", mejor: "con menos superficie impermeable",
   },
   ndvi_medio: {
     titulo: "NDVI medio", corto: "NDVI", unidad: "índice de vegetación, de −1 a 1",
-    rampa: "verde", fmt: (v) => nf2.format(v), peorEsBajo: true,
+    invertir: false, fmt: (v) => nf2.format(v), peorEsBajo: true,
     peor: "con menor NDVI medio", mejor: "con mayor NDVI medio",
   },
   m2_vegetacion_por_habitante: {
     titulo: "Verde por habitante", corto: "m²/hab", unidad: "m² de vegetación por habitante",
-    rampa: "verde", fmt: (v) => `${nf1.format(v)} m²`, peorEsBajo: true,
+    invertir: false, fmt: (v) => `${nf1.format(v)} m²`, peorEsBajo: true,
     peor: "con menos verde por habitante", mejor: "con más verde por habitante",
   },
 };
@@ -73,6 +81,7 @@ const estado = {
   orden: "peor",
   filtro: "",
   clases: null,
+  opacidad: OPACIDAD.mapa,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -89,12 +98,6 @@ function tema() {
   return consultaOscuro.matches ? "oscuro" : "claro";
 }
 
-function teselasBase(t) {
-  const variante = t === "oscuro" ? "dark_all" : "light_all";
-  return ["a", "b", "c", "d"].map(
-    (s) => `https://${s}.basemaps.cartocdn.com/${variante}/{z}/{x}/{y}@2x.png`,
-  );
-}
 
 // ------------------------------------------------------------ utilidades
 
@@ -141,8 +144,8 @@ function calcularClases() {
   }
   const c = cortes(valores);
   const k = c.length + 1;
-  const rampa = RAMPAS[ind.rampa][tema()];
-  const colores = k === 1 ? [rampa[2]] : Array.from({ length: k }, (_, i) => rampa[Math.round((i * 4) / (k - 1))]);
+  const escala = ind.invertir ? [...DIVERGENTE[tema()]].reverse() : DIVERGENTE[tema()];
+  const colores = PASOS[k].map((i) => escala[i]);
   const cuentas = new Array(k).fill(0);
   valores.forEach((v) => { cuentas[claseDe(v, c)] += 1; });
   estado.clases = {
@@ -160,16 +163,16 @@ function claseDe(v, c) {
 
 function colorDe(feature) {
   const v = valor(feature);
-  if (v === null) return SIN_DATO[tema()];
+  if (v === null) return SIN_DATO;
   return estado.clases.colores[claseDe(v, estado.clases.cortes)];
 }
 
 function expresionColor() {
   const { cortes: c, colores } = estado.clases;
-  if (!colores.length) return SIN_DATO[tema()];
+  if (!colores.length) return SIN_DATO;
   const prop = ["get", estado.indicador];
   const escalon = c.length ? ["step", prop, colores[0], ...c.flatMap((corte, i) => [corte, colores[i + 1]])] : colores[0];
-  return ["case", ["==", ["typeof", prop], "number"], escalon, SIN_DATO[tema()]];
+  return ["case", ["==", ["typeof", prop], "number"], escalon, SIN_DATO];
 }
 
 function ordenadas() {
@@ -271,11 +274,12 @@ function aplicarFondo() {
       tiles: [urlImagen(estado.fondo, bandas, servicio)],
       tileSize: 512,
       minzoom: 11,
+      maxzoom: 19,
       attribution: "Imagen WorldView Legion 2026 · geoportal Alcaldía de Barranquilla",
     });
     mapa.addLayer({ id: "imagen", type: "raster", source: "imagen" }, "zonas-relleno");
   }
-  mapa.setPaintProperty("zonas-relleno", "fill-opacity", conImagen ? 0.25 : 0.82);
+  mapa.setPaintProperty("zonas-relleno", "fill-opacity", estado.opacidad);
   mapa.setPaintProperty("zonas-borde", "line-color", conImagen ? "#ffffff" : SUPERFICIE[tema()]);
   mapa.setPaintProperty("zonas-borde", "line-width", conImagen ? 1.5 : 1);
   avisoMapa(
@@ -283,6 +287,48 @@ function aplicarFondo() {
       ? "La imagen no está disponible con datos de demostración."
       : null,
   );
+}
+
+function fijarOpacidad(valor) {
+  estado.opacidad = valor;
+  $("opacidad").value = String(Math.round(valor * 100));
+  if (mapa.getLayer("zonas-relleno")) mapa.setPaintProperty("zonas-relleno", "fill-opacity", valor);
+}
+
+function verImagenDe(feature) {
+  estado.fondo = "imagen";
+  $("fondo").value = "imagen";
+  fijarOpacidad(0);
+  aplicarFondo();
+  escribirHash();
+  const b = limites([feature]);
+  if (b) mapa.fitBounds(b, { padding: 30, maxZoom: 18, duration: 600 });
+  if (pantallaAngosta.matches) {
+    document.querySelector(".mapa-envoltura").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+}
+
+// Foto de la zona en alta resolución, pedida directamente al servicio de la
+// Alcaldía (el sitio no guarda ni redistribuye la imagen).
+function urlFoto(feature, servicio) {
+  const [[lon0, lat0], [lon1, lat1]] = limites([feature]);
+  const R = 6378137;
+  const rad = Math.PI / 180;
+  const mx = (lon) => R * lon * rad;
+  const my = (lat) => R * Math.log(Math.tan(Math.PI / 4 + (lat * rad) / 2));
+  let [x0, y0, x1, y1] = [mx(lon0), my(lat0), mx(lon1), my(lat1)];
+  const margen = 0.05 * Math.max(x1 - x0, y1 - y0);
+  [x0, y0, x1, y1] = [x0 - margen, y0 - margen, x1 + margen, y1 + margen];
+  // Metros de Mercator → metros reales a esta latitud; píxel nativo ≈ 0,34 m.
+  const escala = Math.cos(((lat0 + lat1) / 2) * rad);
+  let ancho = ((x1 - x0) * escala) / 0.34;
+  let alto = ((y1 - y0) * escala) / 0.34;
+  const factor = Math.min(1, 4000 / Math.max(ancho, alto));
+  ancho = Math.max(256, Math.round(ancho * factor));
+  alto = Math.max(256, Math.round(alto * factor));
+  const bbox = [x0, y0, x1, y1].map((v) => v.toFixed(1)).join(",");
+  return `${servicio}/exportImage?bbox=${bbox}&bboxSR=3857&imageSR=3857` +
+    `&size=${ancho},${alto}&format=jpg&f=image`;
 }
 
 let temporizadorAviso;
@@ -335,7 +381,7 @@ function renderLeyenda() {
   const fila = (color, rango, cuenta) => {
     const li = document.createElement("li");
     const m = document.createElement("span");
-    m.className = "muestra";
+    m.className = color === SIN_DATO ? "muestra vacia" : "muestra";
     m.style.background = color;
     const r = document.createElement("span");
     r.className = "rango";
@@ -355,7 +401,7 @@ function renderLeyenda() {
     fila(color, rango, cuentas[i]);
   });
   if (sinDato) {
-    fila(SIN_DATO[tema()], "sin dato", sinDato);
+    fila(SIN_DATO, "sin dato", sinDato);
     ul.append(ul.firstChild); // "sin dato" al final
   }
   cont.append(h3, sub, ul);
@@ -463,6 +509,24 @@ function renderDetalle() {
   if (num("area_m2") !== null) cifra(dl, "Área", `${nf1.format(p.area_m2 / 10000)} ha`);
 
   cont.append(cab, puesto, dl);
+  const servicio = servicioDeCapa();
+  if (servicio) {
+    const acciones = document.createElement("div");
+    acciones.className = "acciones";
+    const ver = document.createElement("button");
+    ver.type = "button";
+    ver.className = "boton";
+    ver.textContent = "Ver la imagen 2026 de esta zona";
+    ver.addEventListener("click", () => verImagenDe(f));
+    const foto = document.createElement("a");
+    foto.className = "boton-texto";
+    foto.href = urlFoto(f, servicio);
+    foto.target = "_blank";
+    foto.rel = "noopener";
+    foto.textContent = "Abrir la foto en alta resolución ↗";
+    acciones.append(ver, foto);
+    cont.append(acciones);
+  }
   if ((p.cobertura_pct ?? 100) < 90) {
     const adv = document.createElement("p");
     adv.className = "advertencia";
@@ -549,18 +613,19 @@ function prepararMapa() {
     container: "mapa",
     center: CONFIG.centro,
     zoom: CONFIG.zoom,
+    maxZoom: 21,
     attributionControl: { compact: true },
     style: {
       version: 8,
       sources: {
         base: {
-          type: "raster", tiles: teselasBase(t), tileSize: 256, maxzoom: 20,
-          attribution: "© OpenStreetMap © CARTO",
+          type: "raster", tiles: TESELAS_BASE, tileSize: 256, maxzoom: 19,
+          attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
         },
       },
       layers: [
         { id: "plano", type: "background", paint: { "background-color": PLANO[t] } },
-        { id: "base", type: "raster", source: "base" },
+        { id: "base", type: "raster", source: "base", paint: PINTURA_BASE[t] },
       ],
     },
   });
@@ -576,7 +641,7 @@ function prepararMapa() {
       });
       mapa.addLayer({
         id: "zonas-relleno", type: "fill", source: "zonas",
-        paint: { "fill-color": SIN_DATO[t], "fill-opacity": 0.82 },
+        paint: { "fill-color": SIN_DATO, "fill-opacity": estado.opacidad },
       });
       // Línea del color de la superficie: separa zonas vecinas sin dibujar bordes.
       mapa.addLayer({
@@ -641,7 +706,9 @@ function escucharMapa() {
 
 function cambiarTema() {
   const t = tema();
-  mapa.getSource("base").setTiles(teselasBase(t));
+  for (const [propiedad, valor] of Object.entries(PINTURA_BASE[t])) {
+    mapa.setPaintProperty("base", propiedad, valor);
+  }
   mapa.setPaintProperty("plano", "background-color", PLANO[t]);
   mapa.setPaintProperty("zonas-resaltado", "line-color", TINTA[t]);
   aplicarFondo();
@@ -687,6 +754,8 @@ async function iniciar() {
     estado.fondo = inicial.fondo;
   }
   $("fondo").value = estado.fondo;
+  estado.opacidad = FONDOS_IMAGEN.has(estado.fondo) ? OPACIDAD.imagen : OPACIDAD.mapa;
+  $("opacidad").value = String(Math.round(estado.opacidad * 100));
 
   const selectorCapa = $("capa");
   for (const capa of catalogo.capas) {
@@ -705,9 +774,11 @@ async function iniciar() {
   });
   $("fondo").addEventListener("change", (e) => {
     estado.fondo = e.target.value;
+    fijarOpacidad(FONDOS_IMAGEN.has(estado.fondo) ? OPACIDAD.imagen : OPACIDAD.mapa);
     aplicarFondo();
     escribirHash();
   });
+  $("opacidad").addEventListener("input", (e) => fijarOpacidad(Number(e.target.value) / 100));
   $("orden").addEventListener("click", () => {
     estado.orden = estado.orden === "peor" ? "mejor" : "peor";
     renderLista();

@@ -169,6 +169,11 @@ Qué hace el visor:
   ImageServer: vista por defecto del servicio, falso color infrarrojo o NDVI
   coloreado por el servidor. Si el servicio no devuelve una vista (CORS o función
   no habilitada), el visor lo avisa y el resto sigue funcionando.
+- Para verificar un resultado: en la ficha de cada zona, "Ver la imagen 2026 de
+  esta zona" pone la imagen de fondo, deja solo los bordes y acerca el mapa; y
+  "Abrir la foto en alta resolución" pide al servicio de la Alcaldía un JPG de la
+  zona a la resolución nativa (hasta 4000 px). El control "Relleno de las zonas"
+  ajusta la transparencia de los polígonos.
 - La URL guarda capa, indicador, fondo y zona (`#capa=barrios&zona=12`), así que
   se puede compartir el enlace a un barrio.
 - Modo claro y oscuro según el sistema; se ve bien en móvil.
@@ -202,11 +207,16 @@ por ejemplo `npx wrangler pages deploy resultados/visor --project-name verde-bar
 Notas:
 
 - MapLibre 5.24 se carga desde unpkg (la rama 6 solo trae módulos ES y su worker
-  no carga bien desde otro dominio). El mapa base es de CARTO/OpenStreetMap.
+  no carga bien desde otro dominio). El mapa base son las teselas de
+  OpenStreetMap, que no piden API key (solo la atribución, que el mapa muestra).
 - Las vistas "infrarrojo" y "NDVI" usan funciones raster de ArcGIS (`Stretch`,
   `ExtractBand`, `NDVI`, `Colormap`) que dependen de lo que habilite el servicio.
-- Los colores son rampas de un solo tono (verde para vegetación, naranja para
-  impermeable), validadas para daltonismo y contraste en modo claro y oscuro.
+- Los colores son una escala divergente por quintiles: café (poca vegetación),
+  gris (cerca de la mediana) y verde azulado (mucha). En "impermeable" se
+  invierte: café es más concreto. Cada lado está validado en modo claro y
+  oscuro, y café frente a verde azulado se distinguen también con daltonismo.
+- La página declara `color-scheme: light dark` para que el modo oscuro
+  automático del navegador no invierta los colores.
 
 ## Advertencias de método
 

@@ -94,6 +94,8 @@ select, input[type="search"] {
   border: 1px solid var(--base); border-radius: 6px; padding: 6px 8px; min-height: 36px;
 }
 
+.control-rango input { width: 160px; accent-color: var(--tinta); margin: 8px 0; }
+
 .segmentado {
   display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 2px;
   border: 1px solid var(--base); border-radius: 8px; background: var(--superficie);
@@ -130,6 +132,7 @@ select, input[type="search"] {
 .leyenda .cuenta { color: var(--tinta-3); font-variant-numeric: tabular-nums; }
 
 .muestra { width: 14px; height: 14px; border-radius: 3px; display: inline-block; }
+.muestra.vacia { box-shadow: inset 0 0 0 1px var(--tinta-3); }
 
 .tooltip {
   position: absolute; z-index: 3; pointer-events: none;
@@ -162,6 +165,14 @@ select, input[type="search"] {
 .cifras dt { font-size: 0.75rem; color: var(--tinta-2); }
 .cifras dd { margin: 0; font-size: 1.25rem; font-weight: 650; }
 .detalle .advertencia { margin: 12px 0 0; font-size: 0.85rem; }
+.acciones { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 14px; }
+.boton {
+  font: inherit; font-size: 0.875rem; font-weight: 600; cursor: pointer;
+  background: var(--tinta); color: var(--superficie); border: 0; border-radius: 6px;
+  padding: 8px 12px;
+}
+.boton:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; }
+.acciones a.boton-texto { text-decoration: none; }
 .detalle .advertencia::before { content: "⚠ "; }
 
 .boton-texto {
