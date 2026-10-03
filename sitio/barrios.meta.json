@@ -1,0 +1,26 @@
+{
+  "servicio": "https://miciudad.barranquilla.gov.co/image/rest/services/orto/orto35_worldview_08001barranquilla_2026/ImageServer",
+  "demo": false,
+  "modo": "servidor",
+  "pixel_m": 1.2,
+  "umbrales": {
+    "vegetacion_ndvi": 0.3,
+    "agua_ndvi": 0.0,
+    "agua_ndwi": 0.1,
+    "sombra_brillo": 0.35
+  },
+  "funcion_ndvi": "bandarithmetic",
+  "bandas": {
+    "coastal": 1,
+    "blue": 2,
+    "green": 3,
+    "yellow": 4,
+    "red": 5,
+    "rededge1": 6,
+    "rededge2": 7,
+    "nir": 8
+  },
+  "buffer_m": null,
+  "n_zonas": 191,
+  "fecha_calculo": "2026-10-03"
+}

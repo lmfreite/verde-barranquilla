@@ -1,0 +1,9 @@
+{
+  "titulo": "¿Cuánto verde tiene tu barrio?",
+  "capas": [
+    {
+      "titulo": "Barrios",
+      "archivo": "barrios.geojson"
+    }
+  ]
+}
