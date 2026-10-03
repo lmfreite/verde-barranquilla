@@ -218,3 +218,12 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# --- verde-barranquilla ---
+# Imagen descargada, caché y resultados: no se versionan (licencia de la imagen).
+# sitio/ sí se versiona (solo estadísticas por zona).
+/datos/
+/resultados/
+*.tif
+*.tiff
+*.parcial
