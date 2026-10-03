@@ -29,5 +29,8 @@ baqgeo = "baqgeo.cli:main"
 [tool.setuptools]
 packages = ["baqgeo"]
 
+[tool.setuptools.package-data]
+baqgeo = ["web/*"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]

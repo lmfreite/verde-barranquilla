@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Verde por barrio</title>
+  <meta name="description" content="Vegetación e impermeabilidad por barrio en Barranquilla, calculadas con la imagen WorldView Legion 2026.">
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css">
+  <link rel="stylesheet" href="visor.css">
+  <script src="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js" defer></script>
+  <script src="visor.js" type="module"></script>
+</head>
+<body>
+  <div class="app">
+    <header class="cabecera">
+      <h1 id="titulo">¿Cuánto verde tiene tu barrio?</h1>
+      <p class="subtitulo">
+        Vegetación y superficie impermeable calculadas con la imagen satelital WorldView Legion 2026.
+        Proyecto independiente, no es un producto oficial de la Alcaldía.
+      </p>
+      <p id="aviso-demo" class="aviso-demo" hidden>
+        Datos de demostración sintéticos: no corresponden a barrios reales.
+      </p>
+    </header>
+
+    <div class="controles" role="group" aria-label="Opciones del mapa">
+      <label class="control" id="control-capa" hidden>
+        <span class="control-etiqueta">Zonas</span>
+        <select id="capa"></select>
+      </label>
+      <fieldset class="control">
+        <legend class="control-etiqueta">Indicador</legend>
+        <div id="indicadores" class="segmentado"></div>
+      </fieldset>
+      <label class="control">
+        <span class="control-etiqueta">Fondo</span>
+        <select id="fondo">
+          <option value="mapa">Mapa</option>
+          <option value="imagen">Imagen 2026</option>
+          <option value="falso_color">Imagen 2026, infrarrojo</option>
+          <option value="ndvi">NDVI calculado por el servicio</option>
+        </select>
+      </label>
+    </div>
+
+    <main class="principal">
+      <section class="mapa-envoltura" aria-label="Mapa">
+        <div id="mapa"></div>
+        <div id="tooltip" class="tooltip" hidden></div>
+        <div id="aviso-mapa" class="aviso-mapa" role="status" hidden></div>
+        <div id="leyenda" class="leyenda" aria-live="polite"></div>
+      </section>
+
+      <aside class="panel">
+        <section id="detalle" class="detalle" hidden aria-live="polite"></section>
+
+        <section class="ranking">
+          <div class="ranking-cabecera">
+            <h2 id="ranking-titulo">Ranking</h2>
+            <p id="ranking-orden" class="muted"></p>
+            <button id="orden" class="boton-texto" type="button"></button>
+          </div>
+          <label class="buscar">
+            <span class="sr-only">Buscar zona</span>
+            <input id="buscar" type="search" placeholder="Buscar por nombre" autocomplete="off">
+          </label>
+          <ol id="lista" class="lista"></ol>
+          <p id="lista-vacia" class="muted" hidden>Ninguna zona coincide con la búsqueda.</p>
+        </section>
+
+        <section class="metodo">
+          <h2>Cómo se calculó</h2>
+          <ul id="metodo-lista"></ul>
+          <p class="muted">
+            “Impermeable” significa no vegetado: techos, vías, concreto y también suelo desnudo.
+            El sensor no tiene infrarrojo de onda corta (SWIR), así que no se pueden separar.
+          </p>
+          <p class="muted">
+            Imagen: WorldView Legion, servida por el geoportal de la Alcaldía de Barranquilla.
+            Este visor solo publica estadísticas por zona; la imagen se consulta directamente al servicio.
+          </p>
+        </section>
+      </aside>
+    </main>
+  </div>
+</body>
+</html>

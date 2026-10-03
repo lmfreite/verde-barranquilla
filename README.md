@@ -120,10 +120,11 @@ Otras opciones útiles:
 
 ## Resultados
 
-En `--salida` quedan tres archivos:
+En `--salida` quedan cuatro archivos:
 
 - `indicadores.gpkg`: zonas en EPSG:9377 con todos los campos, para QGIS.
-- `indicadores.geojson`: WGS84, geometría simplificada a 1 m, para un visor web.
+- `indicadores.geojson`: WGS84, geometría simplificada a 1 m, para el visor web.
+- `indicadores.meta.json`: modo, umbrales, bandas y fecha del cálculo.
 - `indicadores_ranking.csv`: ordenado de menos a más vegetación.
 
 | Campo | Significado |
@@ -138,6 +139,56 @@ En `--salida` quedan tres archivos:
 | `m2_vegetacion`, `m2_impermeable` | áreas absolutas |
 | `m2_vegetacion_por_habitante` | si se dio `--poblacion` |
 | `rank_menos_vegetacion`, `rank_mas_impermeable` | 1 = peor zona |
+
+## Visor web (MapLibre)
+
+`baqgeo visor` arma una carpeta estática con el mapa coroplético, la leyenda, el
+ranking buscable y la ficha de cada zona. Puede llevar varias capas (barrios,
+entornos de colegios...):
+
+```bash
+baqgeo visor \
+  --capa "Barrios=resultados/barrios/indicadores.geojson" \
+  --capa "Entornos de colegios=resultados/barrios/colegios.geojson" \
+  --titulo "¿Cuánto verde tiene tu barrio?" \
+  --salida resultados/visor --servir
+```
+
+Abre `http://127.0.0.1:8000`. Para probarlo con la demo:
+`baqgeo demo` y luego `python -m http.server 8000 --directory resultados/demo/visor`.
+
+Qué hace el visor:
+
+- Colorea cada zona por quintiles del indicador elegido: vegetación, impermeable,
+  NDVI medio o verde por habitante (solo los que tengan datos).
+- Al pasar el puntero muestra el valor; al hacer clic abre la ficha con todas las
+  cifras, su puesto en el ranking y la mediana de las zonas.
+- El ranking es la vista en tabla del mapa: se puede buscar por nombre e invertir
+  el orden.
+- El fondo puede ser el mapa base o la imagen 2026 consultada directamente al
+  ImageServer: vista por defecto del servicio, falso color infrarrojo o NDVI
+  coloreado por el servidor. Si el servicio no devuelve una vista (CORS o función
+  no habilitada), el visor lo avisa y el resto sigue funcionando.
+- La URL guarda capa, indicador, fondo y zona (`#capa=barrios&zona=12`), así que
+  se puede compartir el enlace a un barrio.
+- Modo claro y oscuro según el sistema; se ve bien en móvil.
+- Muestra el método (fecha, modo, umbral) desde el `.meta.json` que escribe
+  `indicadores`, y un aviso cuando los datos son de demostración.
+
+Para publicarlo basta subir la carpeta a cualquier hosting estático, por ejemplo:
+
+```bash
+npx wrangler pages deploy resultados/visor --project-name verde-barranquilla
+```
+
+Notas:
+
+- MapLibre 5.24 se carga desde unpkg (la rama 6 solo trae módulos ES y su worker
+  no carga bien desde otro dominio). El mapa base es de CARTO/OpenStreetMap.
+- Las vistas "infrarrojo" y "NDVI" usan funciones raster de ArcGIS (`Stretch`,
+  `ExtractBand`, `NDVI`, `Colormap`) que dependen de lo que habilite el servicio.
+- Los colores son rampas de un solo tono (verde para vegetación, naranja para
+  impermeable), validadas para daltonismo y contraste en modo claro y oscuro.
 
 ## Advertencias de método
 
@@ -164,7 +215,7 @@ En `--salida` quedan tres archivos:
 WorldView es imagen comercial: la licencia de la Alcaldía probablemente no
 permite redistribuir la imagen ni teselas derivadas.
 
-- Se publica: este código y las estadísticas por zona (`.geojson`, `.csv`).
+- Se publica: este código, el visor y las estadísticas por zona (`.geojson`, `.csv`).
 - No se publica: `datos/` (teselas, caché) ni los rasters de clases. Están en
   `.gitignore`.
 - El visor público debe consumir la imagen directamente del servicio de la
@@ -182,7 +233,9 @@ baqgeo/
   estadisticas.py  modo servidor y modo local
   descarga.py      teselas alineadas a la grilla del servicio
   validacion.py    NDVI del servidor contra el cálculo local
-  salidas.py       ranking y escritura de GPKG/GeoJSON/CSV
+  salidas.py       ranking y escritura de GPKG/GeoJSON/CSV (+ .meta.json)
+  publicar.py      arma la carpeta del visor y la sirve en local
+  web/             visor estático: index.html, visor.css, visor.js (MapLibre)
   demo.py          escena sintética e ImageServer simulado (demo y pruebas)
   cli.py           comandos
 tests/             pytest, sin red

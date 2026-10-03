@@ -1,5 +1,6 @@
 """Une los indicadores a las zonas y los guarda para QGIS y para un visor web."""
 
+import json
 from pathlib import Path
 
 import numpy as np
@@ -27,10 +28,17 @@ def armar_resultado(zonas, indicadores, columna_poblacion=None):
     return gdf
 
 
-def guardar(gdf, carpeta, prefijo="indicadores"):
+def ruta_metadatos(geojson):
+    """Archivo de metadatos que acompaña a un GeoJSON de indicadores."""
+    geojson = Path(geojson)
+    return geojson.with_name(f"{geojson.stem}.meta.json")
+
+
+def guardar(gdf, carpeta, prefijo="indicadores", metadatos=None):
     """Escribe GPKG (EPSG del análisis), GeoJSON (WGS84, para MapLibre) y CSV.
 
-    Solo salen estadísticas por zona: ningún píxel de la imagen.
+    Solo salen estadísticas por zona: ningún píxel de la imagen. `metadatos`
+    (modo, umbrales, fecha...) se guarda junto al GeoJSON para el visor.
     """
     carpeta = Path(carpeta)
     carpeta.mkdir(parents=True, exist_ok=True)
@@ -39,6 +47,8 @@ def guardar(gdf, carpeta, prefijo="indicadores"):
         "geojson": carpeta / f"{prefijo}.geojson",
         "csv": carpeta / f"{prefijo}_ranking.csv",
     }
+    if metadatos is not None:
+        rutas["meta"] = ruta_metadatos(rutas["geojson"])
     for ruta in rutas.values():
         ruta.unlink(missing_ok=True)
 
@@ -57,4 +67,6 @@ def guardar(gdf, carpeta, prefijo="indicadores"):
         .round(decimales)
         .to_csv(rutas["csv"], index=False)
     )
+    if metadatos is not None:
+        rutas["meta"].write_text(json.dumps(metadatos, indent=2, ensure_ascii=False))
     return rutas

@@ -1,9 +1,10 @@
-"""Línea de comandos: baqgeo inspeccionar | validar | indicadores | demo."""
+"""Línea de comandos: baqgeo inspeccionar | validar | indicadores | visor | demo."""
 
 import argparse
 import json
 import sys
-from datetime import datetime, timezone
+from dataclasses import asdict
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 from shapely.geometry import box
@@ -12,6 +13,7 @@ from .config import BANDAS_NECESARIAS, PIXEL_ANALISIS_M, SERVICIO_URL, Umbrales
 from .descarga import descargar_teselas, estimar_mb, filtrar_teselas, planificar_teselas
 from .estadisticas import estadisticas_local, estadisticas_servidor
 from .imageserver import ImageServer, ImageServerError, leer_mapa_bandas, mapa_de_bandas, regla_ndvi
+from .publicar import armar_visor, leer_capa, servir
 from .salidas import armar_resultado, guardar
 from .validacion import validar
 from .zonas import cargar_zonas
@@ -68,6 +70,14 @@ def construir_parser():
                    help="no descarga si el estimado supera este tamaño (modo local)")
     s.add_argument("--guardar-clases", action="store_true",
                    help="guarda el raster de clases por tesela para revisarlo en QGIS (modo local)")
+
+    s = sub.add_parser("visor", help="arma el visor web (MapLibre) con capas de indicadores")
+    s.add_argument("--capa", action="append", required=True, metavar="TITULO=RUTA.geojson",
+                   help="GeoJSON de `indicadores`; se puede repetir (barrios, colegios...)")
+    s.add_argument("--titulo", help="título del visor")
+    s.add_argument("--salida", default="resultados/visor", help="carpeta lista para publicar")
+    s.add_argument("--servir", type=int, nargs="?", const=8000, metavar="PUERTO",
+                   help="sirve el visor en este puerto local (por defecto 8000)")
 
     s = sub.add_parser("demo", help="corre todo sobre una escena sintética, sin red")
     s.add_argument("--salida", default="resultados/demo")
@@ -201,7 +211,7 @@ def _descargar_para(servidor, zonas, bandas, args):
     return descargar_teselas(servidor, teselas, carpeta, seleccion, interpolacion)
 
 
-def ejecutar_indicadores(servidor, args):
+def ejecutar_indicadores(servidor, args, demo=False):
     bandas = _bandas(servidor, args)
     zonas = cargar_zonas(args.zonas, args.capa, args.donde, args.buffer, args.columna_nombre,
                          epsg=servidor.wkid)
@@ -217,8 +227,20 @@ def ejecutar_indicadores(servidor, args):
         clases = Path(args.salida) / "clases" if args.guardar_clases else None
         indicadores = estadisticas_local(rutas, zonas, umbrales, carpeta_clases=clases)
 
+    metadatos = {
+        "servicio": servidor.url,
+        "demo": demo,
+        "modo": args.modo,
+        "pixel_m": args.pixel,
+        "umbrales": asdict(umbrales),
+        "funcion_ndvi": (None if args.modo == "local" or args.regla_ndvi else args.funcion_ndvi),
+        "bandas": bandas,
+        "buffer_m": args.buffer,
+        "n_zonas": len(zonas),
+        "fecha_calculo": date.today().isoformat(),
+    }
     resultado = armar_resultado(zonas, indicadores, args.poblacion)
-    rutas = guardar(resultado, args.salida, args.prefijo)
+    rutas = guardar(resultado, args.salida, args.prefijo, metadatos)
     _imprimir_resumen(resultado)
     print("\nArchivos:")
     for ruta in rutas.values():
@@ -263,12 +285,12 @@ def ejecutar_demo(args):
         resultados[modo] = ejecutar_indicadores(servidor, parser.parse_args([
             "indicadores", "--zonas", str(barrios), "--modo", modo, "--poblacion", "POBLACION",
             "--salida", str(salida), "--prefijo", f"barrios_{modo}", "--cache", str(salida / "cache"),
-        ]))
+        ]), demo=True)
     print("\n== indicadores de colegios (radio 50 m) ==")
     ejecutar_indicadores(servidor, parser.parse_args([
         "indicadores", "--zonas", str(colegios), "--buffer", "50", "--salida", str(salida),
         "--prefijo", "colegios_servidor", "--cache", str(salida / "cache"),
-    ]))
+    ]), demo=True)
 
     print("\n== comparación con la verdad sintética (% vegetación / impermeable) ==")
     for nombre, verdad in demo.VERDAD.items():
@@ -278,6 +300,31 @@ def ejecutar_demo(args):
               f" | local {local.pct_vegetacion:5.1f} / {local.pct_impermeable:5.1f}"
               f" | servidor {servidor_.pct_vegetacion:5.1f} / {servidor_.pct_impermeable:5.1f}"
               " (incluye sombra)")
+
+    visor = armar_visor(
+        [
+            ("Barrios (modo servidor)", salida / "barrios_servidor.geojson"),
+            ("Barrios (modo local)", salida / "barrios_local.geojson"),
+            ("Entornos de colegios", salida / "colegios_servidor.geojson"),
+        ],
+        salida / "visor",
+        titulo="Demostración con datos sintéticos",
+    )
+    print(f"\nVisor de la demo en {visor}. Para abrirlo:")
+    print(f"  python -m http.server 8000 --bind 127.0.0.1 --directory {visor}")
+    return 0
+
+
+def ejecutar_visor(args):
+    capas = [leer_capa(c) for c in args.capa]
+    for _, ruta in capas:
+        if not ruta.exists():
+            raise ValueError(f"No existe {ruta}")
+    carpeta = armar_visor(capas, args.salida, args.titulo)
+    print(f"Visor listo en {carpeta} ({len(capas)} capas).")
+    print("Publícalo como sitio estático (p. ej. Cloudflare Pages) o pruébalo con --servir.")
+    if args.servir:
+        servir(carpeta, args.servir)
     return 0
 
 
@@ -285,6 +332,12 @@ def main(argv=None, session=None):
     args = construir_parser().parse_args(argv)
     if args.comando == "demo":
         return ejecutar_demo(args)
+    if args.comando == "visor":
+        try:
+            return ejecutar_visor(args)
+        except ValueError as error:
+            print(f"Error: {error}", file=sys.stderr)
+            return 1
     servidor = ImageServer(args.servicio, session=session, pausa=args.pausa)
     try:
         if args.comando == "inspeccionar":
