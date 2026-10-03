@@ -1,4 +1,5 @@
-"""Línea de comandos: baqgeo inspeccionar | validar | indicadores | visor | demo."""
+"""Línea de comandos: baqgeo inspeccionar | validar | buscar-capas | indicadores |
+agregar-capa | visor | demo."""
 
 import argparse
 import json
@@ -13,7 +14,8 @@ from .config import BANDAS_NECESARIAS, PIXEL_ANALISIS_M, SERVICIO_URL, Umbrales
 from .descarga import descargar_teselas, estimar_mb, filtrar_teselas, planificar_teselas
 from .estadisticas import estadisticas_local, estadisticas_servidor
 from .imageserver import ImageServer, ImageServerError, leer_mapa_bandas, mapa_de_bandas, regla_ndvi
-from .publicar import armar_visor, leer_capa, leer_manifiesto, servir
+from .explorar import buscar_capas
+from .publicar import agregar_a_sitio, armar_visor, leer_capa, leer_manifiesto, servir
 from .salidas import armar_resultado, guardar
 from .validacion import validar
 from .zonas import cargar_zonas
@@ -58,8 +60,9 @@ def construir_parser():
     s.add_argument("--prefijo", default="indicadores")
     s.add_argument("--poblacion", help="columna de población para m² verdes por habitante")
     s.add_argument("--cache", default="datos", help="carpeta para teselas y respuestas")
-    s.add_argument("--funcion-ndvi", choices=("bandarithmetic", "ndvi"), default="bandarithmetic",
-                   help="función de ArcGIS para el NDVI (usa la que recomiende `validar`)")
+    s.add_argument("--funcion-ndvi", choices=("bandarithmetic", "ndvi", "auto"),
+                   default="bandarithmetic",
+                   help="función de ArcGIS para el NDVI; 'auto' valida primero y elige la que coincide")
     s.add_argument("--regla-ndvi", help="regla de renderizado JSON propia (reemplaza --funcion-ndvi)")
     s.add_argument("--umbral-vegetacion", type=float, default=Umbrales.vegetacion_ndvi)
     s.add_argument("--umbral-agua-ndvi", type=float, default=Umbrales.agua_ndvi)
@@ -70,6 +73,19 @@ def construir_parser():
                    help="no descarga si el estimado supera este tamaño (modo local)")
     s.add_argument("--guardar-clases", action="store_true",
                    help="guarda el raster de clases por tesela para revisarlo en QGIS (modo local)")
+
+    s = sub.add_parser("buscar-capas", help="busca capas (barrios, colegios...) en un geoportal ArcGIS")
+    s.add_argument("--base", default="https://miciudad.barranquilla.gov.co",
+                   help="dominio del geoportal (por defecto %(default)s)")
+    s.add_argument("--palabras", default="barrio,colegio,educa,institu,sede,localidad",
+                   help="palabras a buscar en los nombres, separadas por coma")
+    s.add_argument("--json", help="guarda los resultados en este archivo")
+
+    s = sub.add_parser("agregar-capa", help="copia una capa de `indicadores` a sitio/ y la registra")
+    s.add_argument("--geojson", required=True, help="GeoJSON generado por `indicadores`")
+    s.add_argument("--titulo", required=True, help="nombre visible en el visor, p. ej. Barrios")
+    s.add_argument("--nombre", required=True, help="nombre de archivo, p. ej. barrios")
+    s.add_argument("--sitio", default="sitio", help="carpeta que publica GitHub Pages")
 
     s = sub.add_parser("visor", help="arma el visor web (MapLibre) con capas de indicadores")
     capas = s.add_mutually_exclusive_group(required=True)
@@ -215,6 +231,23 @@ def _descargar_para(servidor, zonas, bandas, args):
     return descargar_teselas(servidor, teselas, carpeta, seleccion, interpolacion)
 
 
+def _funcion_ndvi(servidor, bandas, zonas, args):
+    if args.funcion_ndvi != "auto":
+        return args.funcion_ndvi
+    area = zonas.union_all().intersection(_extension(servidor.info()))
+    resultado = validar(servidor, bandas, area, n=40)
+    if resultado["advertencias"] or not resultado["recomendada"]:
+        estados = {f: r.get("estado") for f, r in resultado["funciones"].items()}
+        raise ValueError(
+            "La validación no encontró una función NDVI confiable "
+            f"(puntos={resultado['n_puntos']}, funciones={estados}, "
+            f"avisos={resultado['advertencias']}). Corre `baqgeo validar` para ver el detalle."
+        )
+    print(f"Validación: se usa la función {resultado['recomendada']} "
+          f"({resultado['n_puntos']} puntos de control).")
+    return resultado["recomendada"]
+
+
 def ejecutar_indicadores(servidor, args, demo=False):
     bandas = _bandas(servidor, args)
     zonas = cargar_zonas(args.zonas, args.capa, args.donde, args.buffer, args.columna_nombre,
@@ -222,8 +255,10 @@ def ejecutar_indicadores(servidor, args, demo=False):
     umbrales = Umbrales(args.umbral_vegetacion, args.umbral_agua_ndvi, args.umbral_agua_ndwi,
                         args.umbral_sombra)
     print(f"{len(zonas)} zonas, modo {args.modo}, píxel {args.pixel} m")
+    funcion = None
     if args.modo == "servidor":
-        regla = json.loads(args.regla_ndvi) if args.regla_ndvi else regla_ndvi(bandas, args.funcion_ndvi)
+        funcion = None if args.regla_ndvi else _funcion_ndvi(servidor, bandas, zonas, args)
+        regla = json.loads(args.regla_ndvi) if args.regla_ndvi else regla_ndvi(bandas, funcion)
         indicadores = estadisticas_servidor(servidor, zonas, bandas, umbrales, args.pixel, regla,
                                             cache=Path(args.cache) / "histogramas")
     else:
@@ -237,7 +272,7 @@ def ejecutar_indicadores(servidor, args, demo=False):
         "modo": args.modo,
         "pixel_m": args.pixel,
         "umbrales": asdict(umbrales),
-        "funcion_ndvi": (None if args.modo == "local" or args.regla_ndvi else args.funcion_ndvi),
+        "funcion_ndvi": funcion,
         "bandas": bandas,
         "buffer_m": args.buffer,
         "n_zonas": len(zonas),
@@ -319,6 +354,26 @@ def ejecutar_demo(args):
     return 0
 
 
+def ejecutar_busqueda(args):
+    palabras = args.palabras.split(",")
+    print(f"Buscando {palabras} en {args.base} ...")
+    encontrados = buscar_capas(args.base, palabras)
+    print(f"\n{len(encontrados)} capas encontradas:")
+    for c in encontrados:
+        print(f"\n- {c['capa']}  ({c['servicio']}, {c['geometria']}, {c['entidades']} entidades)")
+        print(f"  {c['url']}")
+        print(f"  campos: {', '.join(c['campos'][:25])}")
+    if args.json:
+        Path(args.json).write_text(json.dumps(encontrados, indent=2, ensure_ascii=False))
+    return 0
+
+
+def ejecutar_agregar_capa(args):
+    manifiesto = agregar_a_sitio(args.sitio, args.titulo, args.nombre, args.geojson)
+    print(f"Capa '{args.titulo}' agregada; manifiesto: {manifiesto}")
+    return 0
+
+
 def ejecutar_visor(args):
     titulo = args.titulo
     if args.manifiesto:
@@ -338,9 +393,14 @@ def main(argv=None, session=None):
     args = construir_parser().parse_args(argv)
     if args.comando == "demo":
         return ejecutar_demo(args)
-    if args.comando == "visor":
+    sin_servicio = {
+        "visor": ejecutar_visor,
+        "buscar-capas": ejecutar_busqueda,
+        "agregar-capa": ejecutar_agregar_capa,
+    }
+    if args.comando in sin_servicio:
         try:
-            return ejecutar_visor(args)
+            return sin_servicio[args.comando](args)
         except ValueError as error:
             print(f"Error: {error}", file=sys.stderr)
             return 1

@@ -186,7 +186,12 @@ llega un cambio a `main`:
 2. Una sola vez, en GitHub: **Settings → Pages → Source: GitHub Actions**.
 3. Sube a `main`. El sitio queda en `https://lmfreite.github.io/verde-barranquilla/`.
 
-El workflow instala el paquete, corre
+Si no tienes computador a mano, el workflow **Calcular indicadores** hace el
+cálculo en GitHub Actions y deja la capa en `sitio/` (ver
+[`sitio/LEEME.md`](sitio/LEEME.md)). Para encontrar la capa de barrios del
+geoportal: `baqgeo buscar-capas`.
+
+El workflow de Pages instala el paquete, corre
 `baqgeo visor --manifiesto sitio/visor.json --solo-datos-reales` y despliega el
 resultado. Si no existe `sitio/visor.json` no publica nada, y falla si alguna
 capa viene de la demo o no tiene `.meta.json`, para no publicar datos sintéticos.

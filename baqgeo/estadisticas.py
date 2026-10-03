@@ -26,7 +26,7 @@ from shapely.geometry import box
 
 from . import indices
 from .config import PIXEL_ANALISIS_M, Umbrales
-from .imageserver import regla_ndvi
+from .imageserver import ImageServerError, regla_ndvi
 
 COLUMNAS = [
     "zona_id",
@@ -128,18 +128,33 @@ def _consulta_cacheada(cache, geometria, regla, pixel, consultar):
 
 def estadisticas_servidor(servidor, zonas, bandas, umbrales=Umbrales(), pixel=PIXEL_ANALISIS_M,
                           regla=None, cache=None, progreso=print):
-    """Una petición por zona; las respuestas se guardan en `cache` para no repetirlas."""
+    """Una petición por zona; las respuestas se guardan en `cache` para no repetirlas.
+
+    Si una zona falla, queda sin dato y se sigue con las demás; solo se aborta
+    si fallan todas.
+    """
     regla = regla or regla_ndvi(bandas)
     filas = []
+    fallidas = 0
     for k, zona in enumerate(zonas.itertuples(), start=1):
         # Simplificar a medio píxel no cambia el resultado y acorta la petición.
         geometria = zona.geometry.simplify(pixel / 2, preserve_topology=True)
-        respuesta = _consulta_cacheada(
-            cache, geometria, regla, pixel,
-            lambda: servidor.histogramas(geometria, regla, pixel),
-        )
+        try:
+            respuesta = _consulta_cacheada(
+                cache, geometria, regla, pixel,
+                lambda: servidor.histogramas(geometria, regla, pixel),
+            )
+        except ImageServerError as error:
+            fallidas += 1
+            progreso(f"  zona {k}/{len(zonas)} {zona.nombre}: FALLÓ ({error})")
+            respuesta = {}
+        else:
+            progreso(f"  zona {k}/{len(zonas)} {zona.nombre}")
         filas.append(fila_desde_histograma(zona, respuesta, umbrales, pixel))
-        progreso(f"  zona {k}/{len(zonas)} {zona.nombre}")
+    if fallidas == len(zonas):
+        raise ImageServerError("Fallaron todas las zonas; revisa el servicio con `baqgeo validar`.")
+    if fallidas:
+        progreso(f"Aviso: {fallidas} de {len(zonas)} zonas quedaron sin dato por errores del servicio.")
     return pd.DataFrame(filas, columns=COLUMNAS)
 
 

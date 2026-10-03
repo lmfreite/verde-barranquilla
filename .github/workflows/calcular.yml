@@ -1,0 +1,156 @@
+# Calcula indicadores contra el ImageServer de la Alcaldía desde GitHub Actions,
+# sin necesidad de un computador propio. Se lanza a mano (Actions → Calcular
+# indicadores → Run workflow).
+#
+# - diagnostico: inspecciona el servicio, valida el NDVI y busca capas de
+#   barrios y colegios en el geoportal. No cambia nada en el repositorio.
+# - calcular: calcula una capa, la agrega a sitio/, hace commit en main y
+#   lanza la publicación en GitHub Pages.
+name: Calcular indicadores
+
+on:
+  workflow_dispatch:
+    inputs:
+      modo:
+        description: "diagnostico (solo revisa) o calcular (calcula y publica)"
+        type: choice
+        options: [diagnostico, calcular]
+        default: diagnostico
+      zonas:
+        description: "URL de la capa ArcGIS o ruta en el repo con las zonas (modo calcular)"
+        required: false
+        default: ""
+      columna_nombre:
+        description: "Columna con el nombre de cada zona (vacío = automático)"
+        required: false
+        default: ""
+      buffer:
+        description: "Radio en metros si la capa es de puntos, p. ej. colegios (vacío = no aplica)"
+        required: false
+        default: ""
+      titulo:
+        description: "Nombre de la capa en el visor"
+        required: false
+        default: "Barrios"
+      nombre:
+        description: "Nombre del archivo en sitio/"
+        required: false
+        default: "barrios"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: calcular
+  cancel-in-progress: false
+
+jobs:
+  diagnostico:
+    if: inputs.modo == 'diagnostico'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - run: pip install .
+
+      - name: ¿Responde el servicio?
+        continue-on-error: true
+        run: |
+          curl -sS -m 60 -o /dev/null -w "HTTP %{http_code} en %{time_total}s\n" \
+            "https://miciudad.barranquilla.gov.co/image/rest/services/orto/orto35_worldview_08001barranquilla_2026/ImageServer?f=json"
+
+      - name: Inspeccionar el servicio
+        continue-on-error: true
+        run: baqgeo inspeccionar --json servicio.json
+
+      - name: Validar el NDVI del servidor
+        continue-on-error: true
+        run: baqgeo validar
+
+      - name: Buscar capas en el geoportal
+        continue-on-error: true
+        run: baqgeo buscar-capas --json capas.json
+
+      - name: Cartografía catastral en datos.gov.co
+        continue-on-error: true
+        run: |
+          curl -sS -m 60 "https://www.datos.gov.co/api/views/3i4i-apsf.json" | python -c '
+          import json, sys
+          d = json.load(sys.stdin)
+          print(d.get("name"))
+          for a in (d.get("metadata") or {}).get("attachments", []):
+              print("-", a.get("name") or a.get("filename"), a.get("assetId"), a.get("blobId"))
+          '
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: diagnostico
+          path: |
+            servicio.json
+            capas.json
+          if-no-files-found: ignore
+
+  calcular:
+    if: inputs.modo == 'calcular'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+    env:
+      ZONAS: ${{ inputs.zonas }}
+      COLUMNA: ${{ inputs.columna_nombre }}
+      BUFFER: ${{ inputs.buffer }}
+      TITULO: ${{ inputs.titulo }}
+      NOMBRE: ${{ inputs.nombre }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - run: pip install .
+
+      - name: Calcular indicadores
+        run: |
+          if [ -z "$ZONAS" ]; then
+            echo "::error::Falta la entrada 'zonas' (URL de la capa de barrios)."
+            exit 1
+          fi
+          args=(indicadores --zonas "$ZONAS" --funcion-ndvi auto --salida resultados/capa)
+          if [ -n "$COLUMNA" ]; then args+=(--columna-nombre "$COLUMNA"); fi
+          if [ -n "$BUFFER" ]; then args+=(--buffer "$BUFFER"); fi
+          baqgeo "${args[@]}"
+
+      - name: Agregar la capa a sitio/
+        run: baqgeo agregar-capa --geojson resultados/capa/indicadores.geojson --titulo "$TITULO" --nombre "$NOMBRE"
+
+      - name: Comprobar que el visor se arma
+        run: baqgeo visor --manifiesto sitio/visor.json --solo-datos-reales --salida _site
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: resultados-${{ inputs.nombre }}
+          path: resultados/capa
+
+      - name: Commit en main
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add sitio
+          if git diff --cached --quiet; then
+            echo "Sin cambios en sitio/."
+          else
+            git commit -m "Actualizar la capa \"$TITULO\" del visor"
+            git push
+          fi
+
+      - name: Publicar en GitHub Pages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run visor-pages.yml --ref main

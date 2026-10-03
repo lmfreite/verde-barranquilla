@@ -113,6 +113,36 @@ def armar_visor(capas, salida, titulo=None, rechazar_demo=False):
     return salida
 
 
+TITULO_SITIO = "¿Cuánto verde tiene tu barrio?"
+
+
+def agregar_a_sitio(carpeta_sitio, titulo, nombre, geojson):
+    """Copia una capa de `indicadores` a `sitio/` y la registra en visor.json.
+
+    Si ya había una capa con ese `nombre`, la reemplaza. Devuelve la ruta del
+    manifiesto.
+    """
+    sitio = Path(carpeta_sitio)
+    geojson = Path(geojson)
+    _validar_geojson(geojson)
+    meta = ruta_metadatos(geojson)
+    if not meta.exists():
+        raise ValueError(f"{geojson}: falta {meta.name}; genera la capa con `baqgeo indicadores`")
+    nombre = _slug(nombre)
+    sitio.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(geojson, sitio / f"{nombre}.geojson")
+    shutil.copy2(meta, sitio / f"{nombre}.meta.json")
+
+    manifiesto = sitio / "visor.json"
+    datos = json.loads(manifiesto.read_text()) if manifiesto.exists() else {}
+    datos.setdefault("titulo", TITULO_SITIO)
+    capas = [c for c in datos.get("capas", []) if c.get("archivo") != f"{nombre}.geojson"]
+    capas.append({"titulo": titulo, "archivo": f"{nombre}.geojson"})
+    datos["capas"] = capas
+    manifiesto.write_text(json.dumps(datos, indent=2, ensure_ascii=False) + "\n")
+    return manifiesto
+
+
 def servir(carpeta, puerto=8000):
     """Servidor local para probar el visor (no usar en producción)."""
     manejador = partial(SimpleHTTPRequestHandler, directory=str(carpeta))
