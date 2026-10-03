@@ -527,14 +527,19 @@ async function cargarCapa(capa, zonaInicial = null) {
   estado.capa = capa;
   estado.datos = await r.json();
   estado.seleccion = null;
+  estado.filtro = "";
+  $("buscar").value = "";
   mapa.removeFeatureState({ source: "zonas" });
   mapa.getSource("zonas").setData(estado.datos);
   renderIndicadores();
   renderMetodo();
   aplicarFondo();
   actualizar();
-  const b = limites(estado.datos.features);
-  if (b) mapa.fitBounds(b, { padding: 40, duration: 0 });
+  // Encuadre inicial solo con zonas que tienen dato: una zona fuera de la
+  // imagen (p. ej. sobre el río) no debe alejar toda la vista.
+  const conDato = estado.datos.features.filter((f) => valor(f, "pct_vegetacion") !== null);
+  const b = limites(conDato.length ? conDato : estado.datos.features);
+  if (b) mapa.fitBounds(b, { padding: 24, duration: 0 });
   if (zonaInicial !== null && porId(zonaInicial)) seleccionar(zonaInicial, true);
 }
 

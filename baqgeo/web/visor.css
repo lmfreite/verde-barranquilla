@@ -195,6 +195,17 @@ select, input[type="search"] {
 
 .metodo ul { margin: 8px 0; padding-left: 18px; font-size: 0.85rem; color: var(--tinta-2); }
 
+/* ---- móvil: leyenda compacta para no tapar el mapa ---- */
+
+@media (max-width: 599px) {
+  .leyenda { left: 6px; bottom: 26px; padding: 6px 8px; font-size: 0.72rem; }
+  .leyenda h3 { font-size: 0.78rem; margin-bottom: 4px; }
+  .leyenda .sub { display: none; }
+  .leyenda ul { gap: 2px; }
+  .leyenda li { grid-template-columns: 10px auto auto; gap: 6px; }
+  .leyenda .muestra { width: 10px; height: 10px; border-radius: 2px; }
+}
+
 /* ---- escritorio ---- */
 
 @media (min-width: 900px) {
