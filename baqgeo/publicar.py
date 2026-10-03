@@ -1,5 +1,6 @@
 """Arma la carpeta estática del visor (MapLibre) con las capas de indicadores."""
 
+import hashlib
 import json
 import re
 import shutil
@@ -88,6 +89,7 @@ def armar_visor(capas, salida, titulo=None, rechazar_demo=False):
     for archivo in WEB.iterdir():
         if archivo.is_file():
             shutil.copy2(archivo, salida / archivo.name)
+    _versionar_recursos(salida)
 
     datos = salida / "datos"
     if datos.exists():
@@ -111,6 +113,33 @@ def armar_visor(capas, salida, titulo=None, rechazar_demo=False):
         })
     (datos / "capas.json").write_text(json.dumps(catalogo, indent=2, ensure_ascii=False))
     return salida
+
+
+def version_recursos(carpeta):
+    """Huella corta del JS y el CSS del visor: cambia cuando cambia el código."""
+    huella = hashlib.sha1()
+    for nombre in ("visor.js", "visor.css"):
+        huella.update((Path(carpeta) / nombre).read_bytes())
+    return huella.hexdigest()[:10]
+
+
+def _versionar_recursos(carpeta):
+    """Agrega ?v=<huella> a visor.js y visor.css en index.html.
+
+    Los hosting estáticos (GitHub Pages incluido) dejan los archivos en caché
+    unos minutos; con la huella en la URL el navegador pide el código nuevo
+    en cuanto cambia, sin tener que borrar la caché.
+    """
+    version = version_recursos(carpeta)
+    index = Path(carpeta) / "index.html"
+    html = index.read_text()
+    for nombre, atributo in (("visor.js", "src"), ("visor.css", "href")):
+        original = f'{atributo}="{nombre}"'
+        if original not in html:
+            raise ValueError(f"index.html no referencia {nombre} como {original}")
+        html = html.replace(original, f'{atributo}="{nombre}?v={version}"')
+    index.write_text(html)
+    return version
 
 
 TITULO_SITIO = "¿Cuánto verde tiene tu barrio?"

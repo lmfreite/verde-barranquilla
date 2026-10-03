@@ -653,7 +653,8 @@ function actualizar() {
 }
 
 async function cargarCapa(capa, zonaInicial = null) {
-  const r = await fetch(`datos/${capa.archivo}`);
+  // no-cache: revalida con el servidor para ver siempre los datos recién publicados.
+  const r = await fetch(`datos/${capa.archivo}`, { cache: "no-cache" });
   if (!r.ok) throw new Error(`No pude leer datos/${capa.archivo} (HTTP ${r.status})`);
   estado.capa = capa;
   estado.datos = await r.json();
@@ -801,7 +802,7 @@ async function iniciar() {
 
   let catalogo;
   try {
-    const r = await fetch(CONFIG.capas);
+    const r = await fetch(CONFIG.capas, { cache: "no-cache" });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     catalogo = await r.json();
   } catch {

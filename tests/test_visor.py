@@ -23,6 +23,12 @@ def test_demo_arma_visor(demo):
     visor = demo / "visor"
     for archivo in ("index.html", "visor.js", "visor.css"):
         assert (visor / archivo).exists()
+    # Los recursos van con la huella del código para saltarse la caché.
+    from baqgeo.publicar import version_recursos
+    version = version_recursos(visor)
+    html = (visor / "index.html").read_text()
+    assert f'src="visor.js?v={version}"' in html
+    assert f'href="visor.css?v={version}"' in html
     catalogo = json.loads((visor / "datos" / "capas.json").read_text())
     assert [c["id"] for c in catalogo["capas"]] == [
         "barrios-modo-servidor", "barrios-modo-local", "entornos-de-colegios"]

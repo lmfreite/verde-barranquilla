@@ -23,6 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       hay_datos: ${{ steps.revisar.outputs.hay_datos }}
+      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v5
 
@@ -51,6 +52,14 @@ jobs:
         if: steps.revisar.outputs.hay_datos == 'true'
         run: baqgeo visor --manifiesto sitio/visor.json --solo-datos-reales --salida _site
 
+      - name: Versión del código del visor
+        id: version
+        if: steps.revisar.outputs.hay_datos == 'true'
+        run: |
+          version=$(grep -o 'visor.js?v=[0-9a-f]*' _site/index.html | cut -d= -f2)
+          echo "Versión: $version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
       - uses: actions/configure-pages@v5
         if: steps.revisar.outputs.hay_datos == 'true'
 
@@ -69,3 +78,23 @@ jobs:
     steps:
       - id: despliegue
         uses: actions/deploy-pages@v5
+
+      # Pide el sitio en vivo y confirma que ya sirve la versión recién publicada.
+      - name: Comprobar el sitio publicado
+        env:
+          URL: ${{ steps.despliegue.outputs.page_url }}
+          VERSION: ${{ needs.construir.outputs.version }}
+        run: |
+          for intento in $(seq 1 12); do
+            if curl -fsS -H "Cache-Control: no-cache" "${URL}?verificacion=$(date +%s)" \
+                | grep -q "visor.js?v=${VERSION}" \
+              && curl -fsS -o /dev/null "${URL}visor.js?v=${VERSION}" \
+              && curl -fsS -o /dev/null "${URL}datos/capas.json"; then
+              echo "El sitio sirve la versión ${VERSION}: ${URL}"
+              exit 0
+            fi
+            echo "Todavía no se ve la versión ${VERSION}; reintento en 10 s (${intento}/12)."
+            sleep 10
+          done
+          echo "::error::El sitio no sirve la versión ${VERSION} después de 2 minutos."
+          exit 1

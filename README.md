@@ -269,3 +269,12 @@ baqgeo/
 sitio/             capas y manifiesto que publica GitHub Pages (ver LEEME.md)
 tests/             pytest, sin red (corren en cada push: .github/workflows/pruebas.yml)
 ```
+
+## Licencia
+
+El código está bajo licencia [MIT](LICENSE).
+
+Eso no cubre los datos de terceros: la imagen WorldView es de la Alcaldía de
+Barranquilla (licencia comercial) y no se incluye en el repositorio, y las
+geometrías de barrios y colegios vienen de su geoportal. Las estadísticas por
+zona de `sitio/` se derivan de esas fuentes; respeta sus condiciones de uso.
