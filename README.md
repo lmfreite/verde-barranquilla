@@ -1,4 +1,4 @@
-# barranquilla-geo — NDVI e impermeabilidad por barrio
+# verde-barranquilla — NDVI e impermeabilidad por barrio
 
 Calcula, para cada barrio (o cualquier zona: microcuencas, entornos de colegios),
 el **NDVI medio**, el **% de vegetación**, el **% de superficie impermeable** y el
@@ -12,15 +12,15 @@ El resultado son estadísticas por zona en GPKG, GeoJSON (listo para MapLibre) y
 CSV con el ranking de "barrios sin sombra". **Ningún píxel de la imagen sale en los
 resultados.**
 
-> Esta carpeta es independiente de la app Angular del repositorio: no comparten
-> código ni dependencias.
+Proyecto independiente: no es un producto oficial de la Alcaldía de Barranquilla.
 
 ## Instalación
 
 Requiere Python 3.10 o superior.
 
 ```bash
-cd barranquilla-geo
+git clone https://github.com/lmfreite/verde-barranquilla.git
+cd verde-barranquilla
 python -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
@@ -177,14 +177,14 @@ Qué hace el visor:
 
 ### Publicar en GitHub Pages
 
-El workflow `.github/workflows/visor-pages.yml` (en la raíz del repositorio)
-publica el visor cada vez que llega a `master` un cambio en `barranquilla-geo/`:
+El workflow `.github/workflows/visor-pages.yml` publica el visor cada vez que
+llega un cambio a `main`:
 
 1. Pon en `sitio/` los GeoJSON de `indicadores` con su `.meta.json` y un
    `sitio/visor.json` (copia `sitio/visor.ejemplo.json`). Los pasos están en
    [`sitio/LEEME.md`](sitio/LEEME.md).
 2. Una sola vez, en GitHub: **Settings → Pages → Source: GitHub Actions**.
-3. Sube a `master`. El sitio queda en `https://lmfreite.github.io/lf-Music/`.
+3. Sube a `main`. El sitio queda en `https://lmfreite.github.io/verde-barranquilla/`.
 
 El workflow instala el paquete, corre
 `baqgeo visor --manifiesto sitio/visor.json --solo-datos-reales` y despliega el
@@ -252,5 +252,5 @@ baqgeo/
   demo.py          escena sintética e ImageServer simulado (demo y pruebas)
   cli.py           comandos
 sitio/             capas y manifiesto que publica GitHub Pages (ver LEEME.md)
-tests/             pytest, sin red
+tests/             pytest, sin red (corren en cada push: .github/workflows/pruebas.yml)
 ```

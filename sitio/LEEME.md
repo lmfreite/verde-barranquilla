@@ -1,7 +1,7 @@
 # sitio/ — lo que se publica en GitHub Pages
 
 El workflow `.github/workflows/visor-pages.yml` arma el visor con lo que haya en
-esta carpeta y lo publica en GitHub Pages cada vez que se sube un cambio a `master`.
+esta carpeta y lo publica en GitHub Pages cada vez que se sube un cambio a `main`.
 Mientras no exista `visor.json`, el workflow no publica nada.
 
 ## Primera publicación
@@ -36,7 +36,7 @@ Mientras no exista `visor.json`, el workflow no publica nada.
    baqgeo visor --manifiesto sitio/visor.json --solo-datos-reales --servir
    ```
 
-5. Haz commit de `sitio/` y súbelo a `master`.
+5. Haz commit de `sitio/` y súbelo a `main`.
 
 En GitHub, una sola vez: **Settings → Pages → Build and deployment → Source:
 GitHub Actions**.
