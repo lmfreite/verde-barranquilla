@@ -181,6 +181,9 @@ Qué hace el visor:
 - La URL guarda capa, indicador, fondo y zona (`#capa=barrios&zona=12`), así que
   se puede compartir el enlace a un barrio.
 - Modo claro y oscuro según el sistema; se ve bien en móvil.
+- Contador de visitas con [Abacus](https://abacus.jasoncameron.dev) (gratuito, sin
+  cuenta ni cookies): suma cada vez que se abre el visor, recargas incluidas. No
+  cuenta en local y se oculta si el servicio no responde.
 - Muestra el método (fecha, modo, umbral) desde el `.meta.json` que escribe
   `indicadores`, y un aviso cuando los datos son de demostración.
 

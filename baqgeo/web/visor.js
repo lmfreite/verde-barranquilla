@@ -80,6 +80,9 @@ const INDICADORES = {
 
 const FONDOS_IMAGEN = new Set(["imagen", "falso_color", "ndvi"]);
 
+// Contador de visitas con Abacus: gratuito, sin cuenta ni API key.
+const CONTADOR = "https://abacus.jasoncameron.dev";
+
 const estado = {
   catalogo: null,
   capa: null,
@@ -841,7 +844,49 @@ function mostrarError(texto) {
 
 // ---------------------------------------------------------------- inicio
 
+// ------------------------------------------------------- contador de visitas
+
+// Espacio y clave del contador según el sitio, para que cada copia publicada en
+// otro dominio cuente aparte. En local (pruebas) no se cuenta.
+function claveContador() {
+  const host = location.hostname;
+  if (!host || location.protocol === "file:" || ["localhost", "127.0.0.1", "[::1]"].includes(host)) {
+    return null;
+  }
+  const limpiar = (texto) =>
+    texto.toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60);
+  const ruta = location.pathname.split("/").filter(Boolean)[0] || "inicio";
+  return { espacio: limpiar(host), clave: limpiar(`${ruta}-visitas`) };
+}
+
+// Cuenta cada vez que se abre el visor (también recargas y visitas repetidas).
+// Si el servicio no responde o lo bloquea un bloqueador, el contador no aparece.
+async function contarVisita() {
+  const destino = claveContador();
+  if (!destino) return;
+  const control = new AbortController();
+  const plazo = setTimeout(() => control.abort(), 5000);
+  try {
+    const r = await fetch(`${CONTADOR}/hit/${destino.espacio}/${destino.clave}`, {
+      signal: control.signal,
+      cache: "no-store",
+    });
+    if (!r.ok) return;
+    const { value } = await r.json();
+    if (!Number.isFinite(value)) return;
+    const el = $("visitas");
+    el.textContent = `${nf0.format(value)} ${value === 1 ? "visita" : "visitas"}`;
+    el.title = "Cuenta cada vez que se abre el visor";
+    el.hidden = false;
+  } catch {
+    // Servicio caído o bloqueado: el visor funciona igual sin contador.
+  } finally {
+    clearTimeout(plazo);
+  }
+}
+
 async function iniciar() {
+  contarVisita();
   if (!window.maplibregl) {
     mostrarError("No se pudo cargar MapLibre. Revisa la conexión.");
     return;
