@@ -4,6 +4,10 @@
     {
       "titulo": "Barrios",
       "archivo": "barrios.geojson"
+    },
+    {
+      "titulo": "Entornos de colegios (300 m)",
+      "archivo": "colegios.geojson"
     }
   ]
 }
