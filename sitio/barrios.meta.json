@@ -5,6 +5,7 @@
   "pixel_m": 1.2,
   "umbrales": {
     "vegetacion_ndvi": 0.3,
+    "vegetacion_densa_ndvi": 0.6,
     "agua_ndvi": 0.0,
     "agua_ndwi": 0.1,
     "sombra_brillo": 0.35
@@ -22,5 +23,16 @@
   },
   "buffer_m": null,
   "n_zonas": 191,
-  "fecha_calculo": "2026-10-03"
+  "fecha_calculo": "2026-10-03",
+  "temperatura": {
+    "fuente": "Landsat 8/9 Colección 2 nivel 2, banda ST_B10 (USGS), vía Microsoft Planetary Computer",
+    "escenas": 207,
+    "desde": "2023-01-01",
+    "hasta": "2026-09-06",
+    "pixel_m": 30,
+    "nubes_max_pct": 40,
+    "observaciones_mediana": 156,
+    "hora_local_aprox": "10:30",
+    "metodo": "mediana por píxel de las pasadas sin nubes; promedio por zona"
+  }
 }
