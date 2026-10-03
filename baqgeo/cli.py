@@ -15,6 +15,7 @@ from .descarga import descargar_teselas, estimar_mb, filtrar_teselas, planificar
 from .estadisticas import estadisticas_local, estadisticas_servidor
 from .imageserver import ImageServer, ImageServerError, leer_mapa_bandas, mapa_de_bandas, regla_ndvi
 from .explorar import buscar_capas
+from .temperatura import temperatura_superficie
 from .publicar import agregar_a_sitio, armar_visor, leer_capa, leer_manifiesto, servir
 from .salidas import armar_resultado, guardar
 from .validacion import validar
@@ -65,9 +66,17 @@ def construir_parser():
                    help="función de ArcGIS para el NDVI; 'auto' valida primero y elige la que coincide")
     s.add_argument("--regla-ndvi", help="regla de renderizado JSON propia (reemplaza --funcion-ndvi)")
     s.add_argument("--umbral-vegetacion", type=float, default=Umbrales.vegetacion_ndvi)
+    s.add_argument("--umbral-vegetacion-densa", type=float, default=Umbrales.vegetacion_densa_ndvi,
+                   help="NDVI desde el que se considera verde denso (árboles)")
     s.add_argument("--umbral-agua-ndvi", type=float, default=Umbrales.agua_ndvi)
     s.add_argument("--umbral-agua-ndwi", type=float, default=Umbrales.agua_ndwi)
     s.add_argument("--umbral-sombra", type=float, default=Umbrales.sombra_brillo)
+    s.add_argument("--temperatura", action="store_true",
+                   help="agrega la temperatura de superficie media por zona (Landsat 8/9)")
+    s.add_argument("--temp-desde", default="2023-01-01",
+                   help="primera fecha de las escenas Landsat (por defecto %(default)s)")
+    s.add_argument("--temp-nubes", type=float, default=40,
+                   help="máximo %% de nubes por escena Landsat (por defecto %(default)s)")
     s.add_argument("--tesela-px", type=int, default=2048, help="lado de cada tesela (modo local)")
     s.add_argument("--max-gb", type=float, default=2.0,
                    help="no descarga si el estimado supera este tamaño (modo local)")
@@ -252,8 +261,13 @@ def ejecutar_indicadores(servidor, args, demo=False):
     bandas = _bandas(servidor, args)
     zonas = cargar_zonas(args.zonas, args.capa, args.donde, args.buffer, args.columna_nombre,
                          epsg=servidor.wkid)
-    umbrales = Umbrales(args.umbral_vegetacion, args.umbral_agua_ndvi, args.umbral_agua_ndwi,
-                        args.umbral_sombra)
+    umbrales = Umbrales(
+        vegetacion_ndvi=args.umbral_vegetacion,
+        vegetacion_densa_ndvi=args.umbral_vegetacion_densa,
+        agua_ndvi=args.umbral_agua_ndvi,
+        agua_ndwi=args.umbral_agua_ndwi,
+        sombra_brillo=args.umbral_sombra,
+    )
     print(f"{len(zonas)} zonas, modo {args.modo}, píxel {args.pixel} m")
     funcion = None
     if args.modo == "servidor":
@@ -265,6 +279,18 @@ def ejecutar_indicadores(servidor, args, demo=False):
         rutas = _descargar_para(servidor, zonas, bandas, args)
         clases = Path(args.salida) / "clases" if args.guardar_clases else None
         indicadores = estadisticas_local(rutas, zonas, umbrales, carpeta_clases=clases)
+
+    meta_temperatura = None
+    if args.temperatura:
+        print("Temperatura de superficie (Landsat 8/9):")
+        try:
+            temperaturas, meta_temperatura = temperatura_superficie(
+                zonas, desde=args.temp_desde, nubes_max=args.temp_nubes,
+            )
+            indicadores["temp_superficie_c"] = temperaturas
+        except Exception as error:  # noqa: BLE001 - la capa se publica igual sin temperatura
+            print(f"Aviso: no se pudo calcular la temperatura ({type(error).__name__}: {error})",
+                  file=sys.stderr)
 
     metadatos = {
         "servicio": servidor.url,
@@ -278,6 +304,8 @@ def ejecutar_indicadores(servidor, args, demo=False):
         "n_zonas": len(zonas),
         "fecha_calculo": date.today().isoformat(),
     }
+    if meta_temperatura:
+        metadatos["temperatura"] = meta_temperatura
     resultado = armar_resultado(zonas, indicadores, args.poblacion)
     rutas = guardar(resultado, args.salida, args.prefijo, metadatos)
     _imprimir_resumen(resultado)
@@ -288,8 +316,10 @@ def ejecutar_indicadores(servidor, args, demo=False):
 
 
 def _imprimir_resumen(resultado, n=10):
-    columnas = ["nombre", "pct_vegetacion", "pct_impermeable", "pct_agua", "pct_sombra",
-                "ndvi_medio", "cobertura_pct"]
+    columnas = ["nombre", "pct_vegetacion", "pct_vegetacion_densa", "pct_impermeable",
+                "pct_agua", "pct_sombra", "ndvi_medio", "cobertura_pct"]
+    if "temp_superficie_c" in resultado.columns:
+        columnas.append("temp_superficie_c")
     tabla = resultado.sort_values("pct_vegetacion", na_position="last")[columnas].head(n)
     print(f"\nZonas con menos vegetación (primeras {min(n, len(resultado))}):")
     print(tabla.round(2).to_string(index=False))

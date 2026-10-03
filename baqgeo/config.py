@@ -39,6 +39,8 @@ class Umbrales:
 
     # NDVI >= este valor -> vegetación.
     vegetacion_ndvi: float = 0.30
+    # NDVI >= este valor -> verde denso (sobre todo copas de árboles).
+    vegetacion_densa_ndvi: float = 0.60
     # NDVI < este valor -> agua (modo servidor, y condición extra en modo local).
     agua_ndvi: float = 0.0
     # NDWI > este valor (y NDVI < agua_ndvi) -> agua (modo local).

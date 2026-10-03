@@ -37,6 +37,9 @@ def test_indicadores_coinciden_con_la_verdad(tmp_path, barrios, modo):
         fila = gdf.loc[nombre]
         impermeable = verdad["impermeable"] + (verdad["sombra"] if modo == "servidor" else 0)
         assert fila.pct_vegetacion == pytest.approx(verdad["vegetacion"], abs=0.5)
+        # En la escena sintética toda la vegetación es densa (NDVI ~0,82).
+        assert fila.pct_vegetacion_densa == pytest.approx(verdad["vegetacion"], abs=0.5)
+        assert fila.pct_vegetacion_rala == pytest.approx(0, abs=0.5)
         assert fila.pct_impermeable == pytest.approx(impermeable, abs=0.5)
         assert fila.pct_agua == pytest.approx(verdad["agua"], abs=0.5)
         assert fila.cobertura_pct == pytest.approx(verdad["cobertura"], abs=0.5)

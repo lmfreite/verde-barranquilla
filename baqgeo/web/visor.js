@@ -51,10 +51,20 @@ const INDICADORES = {
     invertir: false, fmt: pct, peorEsBajo: true,
     peor: "con menos vegetación", mejor: "con más vegetación",
   },
+  pct_vegetacion_densa: {
+    titulo: "Árboles", corto: "% árboles", unidad: "% del área con verde denso (árboles)",
+    invertir: false, fmt: pct, peorEsBajo: true,
+    peor: "con menos verde denso", mejor: "con más verde denso",
+  },
   pct_impermeable: {
     titulo: "Impermeable", corto: "% impermeable", unidad: "% del área no vegetada",
     invertir: true, fmt: pct, peorEsBajo: false,
     peor: "con más superficie impermeable", mejor: "con menos superficie impermeable",
+  },
+  temp_superficie_c: {
+    titulo: "Temperatura", corto: "°C", unidad: "°C de la superficie a media mañana (Landsat)",
+    invertir: true, fmt: (v) => `${nf1.format(v)} °C`, peorEsBajo: false,
+    peor: "más calientes", mejor: "más frescas",
   },
   ndvi_medio: {
     titulo: "NDVI medio", corto: "NDVI", unidad: "índice de vegetación, de −1 a 1",
@@ -456,7 +466,12 @@ function renderLista() {
 function ayudas() {
   const meta = estado.capa?.meta || {};
   const umbral = meta.umbrales?.vegetacion_ndvi ?? 0.3;
+  const umbralDenso = meta.umbrales?.vegetacion_densa_ndvi ?? 0.6;
   const conSombras = meta.modo !== "local";
+  const temp = meta.temperatura || {};
+  const periodo = temp.desde
+    ? `la mediana de ${temp.escenas} pasadas sin nubes entre ${temp.desde} y ${temp.hasta}`
+    : "la mediana de varias pasadas sin nubes";
   return {
     puesto:
       "Posición de esta zona en el ranking del indicador elegido arriba. La mediana es el " +
@@ -465,6 +480,16 @@ function ayudas() {
       "Parte del área cubierta por plantas vivas (árboles, pasto, jardines) según la imagen " +
       `satelital: los puntos con NDVI de ${nf2.format(umbral)} o más. No distingue un árbol ` +
       "que da sombra de un potrero.",
+    densa:
+      `Parte del área con verde denso (NDVI de ${nf2.format(umbralDenso)} o más). Casi siempre ` +
+      "son copas de árboles, que son las que dan sombra; un césped muy regado también puede entrar.",
+    rala:
+      `Parte del área con pasto, potreros, arbustos o vegetación dispersa o seca (NDVI entre ` +
+      `${nf2.format(umbral)} y ${nf2.format(umbralDenso)}). Cuenta como vegetación pero da poca sombra.`,
+    temperatura:
+      "Temperatura de la superficie (techos, calles, suelo y copas de árboles) que mide el " +
+      `satélite Landsat hacia las 10:30 a. m.: ${periodo}. No es la temperatura del aire; ` +
+      "sirve para comparar zonas. Donde hay más árboles la superficie suele estar más fresca.",
     impermeable:
       "Parte del área sin vegetación: techos, calles, andenes y concreto. También cuenta la " +
       "tierra y los lotes sin pasto, porque el satélite no los separa del concreto" +
@@ -502,13 +527,19 @@ function botonInfo(etiqueta, explicacion, contenedor) {
   return boton;
 }
 
-function cifra(dl, titulo, texto, ayuda) {
+function cifra(dl, titulo, texto, ayuda, nota) {
   const div = document.createElement("div");
   const dt = document.createElement("dt");
   dt.textContent = titulo;
   const dd = document.createElement("dd");
   dd.textContent = texto;
   div.append(dt, dd);
+  if (nota) {
+    const ddNota = document.createElement("dd");
+    ddNota.className = "nota";
+    ddNota.textContent = nota;
+    div.append(ddNota);
+  }
   if (ayuda) {
     const explicacion = document.createElement("dd");
     explicacion.textContent = ayuda;
@@ -560,6 +591,18 @@ function renderDetalle() {
   const num = (k) => (typeof p[k] === "number" ? p[k] : null);
   if (num("pct_vegetacion") !== null) {
     cifra(dl, "Vegetación", pct(p.pct_vegetacion), textos.vegetacion);
+  }
+  if (num("pct_vegetacion_densa") !== null) {
+    cifra(dl, "Verde denso (árboles)", pct(p.pct_vegetacion_densa), textos.densa);
+    cifra(dl, "Pasto o verde ralo", pct(p.pct_vegetacion_rala), textos.rala);
+  }
+  if (num("temp_superficie_c") !== null) {
+    const medianaTemp = mediana(estado.datos.features.map((g) => valor(g, "temp_superficie_c")));
+    const delta = p.temp_superficie_c - medianaTemp;
+    const nota = Math.abs(delta) < 0.05
+      ? "igual a la mediana de las zonas"
+      : `${delta > 0 ? "+" : "−"}${nf1.format(Math.abs(delta))} °C respecto a la mediana de las zonas`;
+    cifra(dl, "Temperatura", `${nf1.format(p.temp_superficie_c)} °C`, textos.temperatura, nota);
   }
   if (num("pct_impermeable") !== null) {
     cifra(dl, "Impermeable", pct(p.pct_impermeable), textos.impermeable);
@@ -622,6 +665,11 @@ function renderMetodo() {
     item(`Vegetación: NDVI ≥ ${nf2.format(meta.umbrales.vegetacion_ndvi)}.`);
   }
   if (meta.buffer_m) item(`Cada punto se analiza en un radio de ${nf0.format(meta.buffer_m)} m.`);
+  if (meta.temperatura) {
+    const t = meta.temperatura;
+    item(`Temperatura: Landsat 8/9 (USGS, dominio público), mediana de ${t.escenas} pasadas ` +
+      `sin nubes entre ${t.desde} y ${t.hasta}, hacia las 10:30 a. m.`);
+  }
   $("aviso-demo").hidden = !meta.demo;
 }
 

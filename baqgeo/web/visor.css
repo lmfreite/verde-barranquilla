@@ -179,6 +179,7 @@ select, input[type="search"] {
 .info:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; }
 .ayuda { margin: 6px 0 12px; font-size: 0.85rem; line-height: 1.45; color: var(--tinta-2); }
 .cifras dd.ayuda { margin: 6px 0 0; font-size: 0.85rem; font-weight: 400; }
+.cifras dd.nota { font-size: 0.8rem; font-weight: 400; color: var(--tinta-2); }
 .cifras div.abierta { grid-column: 1 / -1; }
 .acciones { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 14px; }
 .boton {

@@ -165,8 +165,14 @@ def agregar_a_sitio(carpeta_sitio, titulo, nombre, geojson):
     manifiesto = sitio / "visor.json"
     datos = json.loads(manifiesto.read_text()) if manifiesto.exists() else {}
     datos.setdefault("titulo", TITULO_SITIO)
-    capas = [c for c in datos.get("capas", []) if c.get("archivo") != f"{nombre}.geojson"]
-    capas.append({"titulo": titulo, "archivo": f"{nombre}.geojson"})
+    # Si la capa ya existía se actualiza en su lugar, para no cambiar el orden del selector.
+    capas = datos.get("capas", [])
+    nueva = {"titulo": titulo, "archivo": f"{nombre}.geojson"}
+    posicion = next((i for i, c in enumerate(capas) if c.get("archivo") == nueva["archivo"]), None)
+    if posicion is None:
+        capas.append(nueva)
+    else:
+        capas[posicion] = nueva
     datos["capas"] = capas
     manifiesto.write_text(json.dumps(datos, indent=2, ensure_ascii=False) + "\n")
     return manifiesto

@@ -133,6 +133,9 @@ En `--salida` quedan cuatro archivos:
 | `cobertura_pct` | % de la zona cubierto por la imagen (revisa las < 90 %) |
 | `ndvi_medio` | NDVI promedio |
 | `pct_vegetacion` | NDVI ≥ umbral de vegetación |
+| `pct_vegetacion_densa` | NDVI ≥ 0,60: verde denso, sobre todo copas de árboles |
+| `pct_vegetacion_rala` | vegetación entre los dos umbrales: pasto, potreros, verde disperso |
+| `temp_superficie_c` | temperatura media de la superficie (°C), con `--temperatura` |
 | `pct_impermeable` | resto no vegetado: techos, vías, concreto, suelo desnudo (y sombra en modo servidor) |
 | `pct_agua` | NDVI < 0 (servidor) o NDWI alto con NDVI < 0 (local) |
 | `pct_sombra` | solo en modo local |
@@ -159,8 +162,9 @@ Abre `http://127.0.0.1:8000`. Para probarlo con la demo:
 
 Qué hace el visor:
 
-- Colorea cada zona por quintiles del indicador elegido: vegetación, impermeable,
-  NDVI medio o verde por habitante (solo los que tengan datos).
+- Colorea cada zona por quintiles del indicador elegido: vegetación, árboles,
+  impermeable, temperatura, NDVI medio o verde por habitante (solo los que tengan
+  datos).
 - Al pasar el puntero muestra el valor; al hacer clic abre la ficha con todas las
   cifras, su puesto en el ranking y la mediana de las zonas.
 - El ranking es la vista en tabla del mapa: se puede buscar por nombre e invertir
@@ -217,6 +221,23 @@ Notas:
   oscuro, y café frente a verde azulado se distinguen también con daltonismo.
 - La página declara `color-scheme: light dark` para que el modo oscuro
   automático del navegador no invierta los colores.
+
+## Temperatura de superficie (Landsat)
+
+`baqgeo indicadores ... --temperatura` agrega la temperatura media de la
+superficie por zona:
+
+- Fuente: Landsat 8/9, Colección 2 nivel 2, banda térmica ST_B10, leída del
+  catálogo STAC abierto de Microsoft Planetary Computer (no pide API key). Los
+  datos de Landsat son de dominio público (USGS).
+- Método: para cada píxel de 30 m, mediana de todas las pasadas con menos de
+  40 % de nubes desde 2023 (`--temp-desde`, `--temp-nubes`), descartando los
+  píxeles marcados como nube, sombra de nube o cirro. Luego, promedio por zona.
+- Es la temperatura de techos, calles, suelo y copas a las ~10:30 a. m., no la
+  del aire. El dato térmico nativo es de 100 m (USGS lo entrega a 30 m): sirve
+  para comparar barrios, no manzanas.
+- Si Landsat no responde, la capa se publica igual sin temperatura y el
+  registro lo avisa.
 
 ## Advertencias de método
 

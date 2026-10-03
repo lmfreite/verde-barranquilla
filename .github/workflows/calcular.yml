@@ -36,6 +36,10 @@ on:
         description: "Nombre del archivo en sitio/"
         required: false
         default: "barrios"
+      temperatura:
+        description: "Agregar la temperatura de superficie (Landsat 8/9)"
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -107,6 +111,7 @@ jobs:
       BUFFER: ${{ inputs.buffer }}
       TITULO: ${{ inputs.titulo }}
       NOMBRE: ${{ inputs.nombre }}
+      TEMPERATURA: ${{ inputs.temperatura }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v5
@@ -125,6 +130,7 @@ jobs:
           args=(indicadores --zonas "$ZONAS" --funcion-ndvi auto --salida resultados/capa)
           if [ -n "$COLUMNA" ]; then args+=(--columna-nombre "$COLUMNA"); fi
           if [ -n "$BUFFER" ]; then args+=(--buffer "$BUFFER"); fi
+          if [ "$TEMPERATURA" = "true" ]; then args+=(--temperatura); fi
           baqgeo "${args[@]}"
 
       - name: Agregar la capa a sitio/
@@ -147,6 +153,8 @@ jobs:
             echo "Sin cambios en sitio/."
           else
             git commit -m "Actualizar la capa \"$TITULO\" del visor"
+            # Otro cálculo pudo haber subido cambios mientras este corría.
+            git pull --rebase origin main
             git push
           fi
 

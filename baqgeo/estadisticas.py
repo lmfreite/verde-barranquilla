@@ -36,13 +36,17 @@ COLUMNAS = [
     "cobertura_pct",
     "ndvi_medio",
     "pct_vegetacion",
+    "pct_vegetacion_densa",
+    "pct_vegetacion_rala",
     "pct_impermeable",
     "pct_agua",
     "pct_sombra",
 ]
 
 
-def _fila(zona, area_pixel, validos, vegetacion, impermeable, agua, sombra, ndvi_medio):
+def _fila(zona, area_pixel, validos, vegetacion, impermeable, agua, sombra, ndvi_medio, densa):
+    """Conteos de píxeles -> porcentajes. `densa` es la parte de `vegetacion`
+    con NDVI alto (verde denso); el resto es pasto o verde ralo."""
     area = zona.geometry.area
     if not validos:
         return {
@@ -61,6 +65,8 @@ def _fila(zona, area_pixel, validos, vegetacion, impermeable, agua, sombra, ndvi
         "cobertura_pct": min(100.0, 100 * validos * area_pixel / area) if area else math.nan,
         "ndvi_medio": ndvi_medio,
         "pct_vegetacion": 100 * vegetacion / validos,
+        "pct_vegetacion_densa": 100 * densa / validos,
+        "pct_vegetacion_rala": 100 * max(0.0, vegetacion - densa) / validos,
         "pct_impermeable": 100 * impermeable / validos,
         "pct_agua": 100 * agua / validos,
         "pct_sombra": math.nan if sombra is None else 100 * sombra / validos,
@@ -87,7 +93,7 @@ def fila_desde_histograma(zona, respuesta, umbrales, pixel):
     histograma = (respuesta.get("histograms") or [None])[0]
     total = sum(histograma["counts"]) if histograma else 0
     if not total:
-        return _fila(zona, pixel * pixel, 0, 0, 0, 0, None, math.nan)
+        return _fila(zona, pixel * pixel, 0, 0, 0, 0, None, math.nan, 0)
     a, b = escala_ndvi(estadisticas, histograma)
     hist_ndvi = {
         "min": a * histograma["min"] + b,
@@ -95,6 +101,9 @@ def fila_desde_histograma(zona, respuesta, umbrales, pixel):
         "counts": histograma["counts"],
     }
     f_vegetacion = indices.fraccion_en_rango(hist_ndvi, desde=umbrales.vegetacion_ndvi)
+    f_densa = indices.fraccion_en_rango(
+        hist_ndvi, desde=max(umbrales.vegetacion_densa_ndvi, umbrales.vegetacion_ndvi)
+    )
     f_agua = indices.fraccion_en_rango(hist_ndvi, hasta=umbrales.agua_ndvi)
     f_impermeable = max(0.0, 1.0 - f_vegetacion - f_agua)
     media = estadisticas.get("mean")
@@ -107,6 +116,7 @@ def fila_desde_histograma(zona, respuesta, umbrales, pixel):
         f_agua * total,
         None,
         a * media + b if media is not None else math.nan,
+        f_densa * total,
     )
 
 
@@ -204,8 +214,9 @@ def estadisticas_local(rutas, zonas, umbrales=Umbrales(), carpeta_clases=None, p
     referencia = brillo_de_referencia(rutas)
     geometrias = list(zonas.geometry)
     arbol = STRtree(geometrias)
-    # validos, vegetacion, impermeable, agua, sombra, suma_ndvi
-    acumulado = np.zeros((len(zonas), 6), dtype="float64")
+    # validos, vegetacion, impermeable, agua, sombra, suma_ndvi, vegetacion densa
+    acumulado = np.zeros((len(zonas), 7), dtype="float64")
+    umbral_denso = max(umbrales.vegetacion_densa_ndvi, umbrales.vegetacion_ndvi)
     area_pixel = None
 
     for k, ruta in enumerate(rutas, start=1):
@@ -246,13 +257,14 @@ def estadisticas_local(rutas, zonas, umbrales=Umbrales(), carpeta_clases=None, p
                 np.count_nonzero(c == indices.AGUA),
                 np.count_nonzero(c == indices.SOMBRA),
                 np.nansum(v),
+                np.count_nonzero((c == indices.VEGETACION) & (v >= umbral_denso)),
             ]
         progreso(f"  clasificada {k}/{len(rutas)} {Path(ruta).name}")
 
     filas_df = []
-    for zona, (validos, veg, imp, agua, sombra, suma) in zip(zonas.itertuples(), acumulado):
+    for zona, (validos, veg, imp, agua, sombra, suma, densa) in zip(zonas.itertuples(), acumulado):
         filas_df.append(_fila(
             zona, area_pixel or 0.0, int(validos), veg, imp, agua, sombra,
-            suma / validos if validos else math.nan,
+            suma / validos if validos else math.nan, densa,
         ))
     return pd.DataFrame(filas_df, columns=COLUMNAS)

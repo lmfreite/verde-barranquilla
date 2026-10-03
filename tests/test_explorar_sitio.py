@@ -82,7 +82,7 @@ def test_agregar_a_sitio_crea_y_reemplaza(corrida_demo, tmp_path):
     manifiesto = json.loads((sitio / "visor.json").read_text())
     assert manifiesto["titulo"]
     assert [(c["titulo"], c["archivo"]) for c in manifiesto["capas"]] == [
-        ("Colegios", "colegios.geojson"), ("Barrios 2026", "barrios.geojson")]
+        ("Barrios 2026", "barrios.geojson"), ("Colegios", "colegios.geojson")]
     assert (sitio / "barrios.meta.json").exists()
 
 
