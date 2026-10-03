@@ -165,6 +165,21 @@ select, input[type="search"] {
 .cifras dt { font-size: 0.75rem; color: var(--tinta-2); }
 .cifras dd { margin: 0; font-size: 1.25rem; font-weight: 650; }
 .detalle .advertencia { margin: 12px 0 0; font-size: 0.85rem; }
+
+/* Botón "i" con su explicación desplegable */
+.info {
+  position: relative; display: inline-grid; place-items: center;
+  width: 18px; height: 18px; margin-left: 6px; padding: 0; vertical-align: middle;
+  border-radius: 50%; border: 1.5px solid currentColor; background: none;
+  color: var(--tinta-2); font: 700 11px/1 system-ui, -apple-system, "Segoe UI", sans-serif;
+  cursor: pointer;
+}
+.info::after { content: ""; position: absolute; inset: -9px; } /* área táctil de ~36 px */
+.info[aria-expanded="true"] { background: var(--tinta); border-color: var(--tinta); color: var(--superficie); }
+.info:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; }
+.ayuda { margin: 6px 0 12px; font-size: 0.85rem; line-height: 1.45; color: var(--tinta-2); }
+.cifras dd.ayuda { margin: 6px 0 0; font-size: 0.85rem; font-weight: 400; }
+.cifras div.abierta { grid-column: 1 / -1; }
 .acciones { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 14px; }
 .boton {
   font: inherit; font-size: 0.875rem; font-weight: 600; cursor: pointer;

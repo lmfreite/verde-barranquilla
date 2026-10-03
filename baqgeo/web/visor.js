@@ -411,7 +411,7 @@ function renderLista() {
   const ind = INDICADORES[estado.indicador];
   const lista = $("lista");
   lista.replaceChildren();
-  $("ranking-titulo").textContent = `Ranking: ${ind.titulo.toLowerCase()}`;
+  $("ranking-titulo").textContent = `Ranking: ${ind.titulo}`;
   $("ranking-orden").textContent = `Primero las zonas ${estado.orden === "peor" ? ind.peor : ind.mejor}.`;
   $("orden").textContent = `Ver primero las zonas ${estado.orden === "peor" ? ind.mejor : ind.peor}`;
   const filtro = sinAcentos(estado.filtro.trim());
@@ -452,13 +452,69 @@ function renderLista() {
   $("lista-vacia").hidden = visibles > 0;
 }
 
-function cifra(dl, titulo, texto) {
+// Explicación en lenguaje sencillo de cada cifra de la ficha.
+function ayudas() {
+  const meta = estado.capa?.meta || {};
+  const umbral = meta.umbrales?.vegetacion_ndvi ?? 0.3;
+  const conSombras = meta.modo !== "local";
+  return {
+    puesto:
+      "Posición de esta zona en el ranking del indicador elegido arriba. La mediana es el " +
+      "valor de la zona del medio: la mitad de las zonas tiene más y la otra mitad menos.",
+    vegetacion:
+      "Parte del área cubierta por plantas vivas (árboles, pasto, jardines) según la imagen " +
+      `satelital: los puntos con NDVI de ${nf2.format(umbral)} o más. No distingue un árbol ` +
+      "que da sombra de un potrero.",
+    impermeable:
+      "Parte del área sin vegetación: techos, calles, andenes y concreto. También cuenta la " +
+      "tierra y los lotes sin pasto, porque el satélite no los separa del concreto" +
+      (conSombras ? ", y las sombras de los edificios." : "."),
+    ndvi:
+      "Índice de vegetación promedio de la zona, de −1 a 1. Menos de 0,2: casi todo concreto " +
+      "o tierra; de 0,2 a 0,4: pasto o vegetación escasa; más de 0,6: árboles frondosos y sanos.",
+    habitante: "Metros cuadrados de vegetación de la zona divididos entre su población.",
+    sombra: "Parte del área en sombra de edificios, donde la imagen no deja ver qué hay.",
+    agua: "Parte del área con agua: caños, lagunas o piscinas grandes (NDVI negativo).",
+    area: "Tamaño de la zona. Una hectárea son 10.000 m², algo más que una cancha de fútbol.",
+  };
+}
+
+// Botón "i" que abre y cierra una explicación. Funciona con toque y teclado.
+let contadorAyudas = 0;
+function botonInfo(etiqueta, explicacion, contenedor) {
+  const id = `ayuda-${++contadorAyudas}`;
+  explicacion.id = id;
+  explicacion.className = "ayuda";
+  explicacion.hidden = true;
+  const boton = document.createElement("button");
+  boton.type = "button";
+  boton.className = "info";
+  boton.textContent = "i";
+  boton.setAttribute("aria-label", `Qué significa: ${etiqueta}`);
+  boton.setAttribute("aria-expanded", "false");
+  boton.setAttribute("aria-controls", id);
+  boton.addEventListener("click", () => {
+    const abrir = explicacion.hidden;
+    explicacion.hidden = !abrir;
+    boton.setAttribute("aria-expanded", String(abrir));
+    contenedor.classList.toggle("abierta", abrir);
+  });
+  return boton;
+}
+
+function cifra(dl, titulo, texto, ayuda) {
   const div = document.createElement("div");
   const dt = document.createElement("dt");
   dt.textContent = titulo;
   const dd = document.createElement("dd");
   dd.textContent = texto;
   div.append(dt, dd);
+  if (ayuda) {
+    const explicacion = document.createElement("dd");
+    explicacion.textContent = ayuda;
+    dt.append(botonInfo(titulo, explicacion, div));
+    div.append(explicacion);
+  }
   dl.append(div);
 }
 
@@ -487,10 +543,14 @@ function renderDetalle() {
   const n = puestoPeor(f);
   const total = estado.datos.features.filter((g) => valor(g) !== null).length;
   const med = mediana(estado.datos.features.map((g) => valor(g)));
+  const textos = ayudas();
+  const explicacionPuesto = document.createElement("p");
+  explicacionPuesto.textContent = textos.puesto;
   if (n !== null) {
     puesto.textContent =
       `Puesto ${n} de ${total} entre las zonas ${ind.peor}. ` +
       `Mediana de las zonas: ${ind.fmt(med)}.`;
+    puesto.append(" ", botonInfo("el puesto y la mediana", explicacionPuesto, puesto));
   } else {
     puesto.textContent = "Sin dato para este indicador.";
   }
@@ -498,17 +558,24 @@ function renderDetalle() {
   const dl = document.createElement("dl");
   dl.className = "cifras";
   const num = (k) => (typeof p[k] === "number" ? p[k] : null);
-  if (num("pct_vegetacion") !== null) cifra(dl, "Vegetación", pct(p.pct_vegetacion));
-  if (num("pct_impermeable") !== null) cifra(dl, "Impermeable", pct(p.pct_impermeable));
-  if (num("ndvi_medio") !== null) cifra(dl, "NDVI medio", nf2.format(p.ndvi_medio));
-  if (num("m2_vegetacion_por_habitante") !== null) {
-    cifra(dl, "Verde por habitante", `${nf1.format(p.m2_vegetacion_por_habitante)} m²`);
+  if (num("pct_vegetacion") !== null) {
+    cifra(dl, "Vegetación", pct(p.pct_vegetacion), textos.vegetacion);
   }
-  if (num("pct_sombra") !== null) cifra(dl, "Sombra", pct(p.pct_sombra));
-  if (num("pct_agua") !== null && p.pct_agua > 0) cifra(dl, "Agua", pct(p.pct_agua));
-  if (num("area_m2") !== null) cifra(dl, "Área", `${nf1.format(p.area_m2 / 10000)} ha`);
+  if (num("pct_impermeable") !== null) {
+    cifra(dl, "Impermeable", pct(p.pct_impermeable), textos.impermeable);
+  }
+  if (num("ndvi_medio") !== null) cifra(dl, "NDVI medio", nf2.format(p.ndvi_medio), textos.ndvi);
+  if (num("m2_vegetacion_por_habitante") !== null) {
+    cifra(dl, "Verde por habitante", `${nf1.format(p.m2_vegetacion_por_habitante)} m²`,
+      textos.habitante);
+  }
+  if (num("pct_sombra") !== null) cifra(dl, "Sombra", pct(p.pct_sombra), textos.sombra);
+  if (num("pct_agua") !== null && p.pct_agua > 0) cifra(dl, "Agua", pct(p.pct_agua), textos.agua);
+  if (num("area_m2") !== null) {
+    cifra(dl, "Área", `${nf1.format(p.area_m2 / 10000)} ha`, textos.area);
+  }
 
-  cont.append(cab, puesto, dl);
+  cont.append(cab, puesto, explicacionPuesto, dl);
   const servicio = servicioDeCapa();
   if (servicio) {
     const acciones = document.createElement("div");
