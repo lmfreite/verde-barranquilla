@@ -13,7 +13,7 @@ from .config import BANDAS_NECESARIAS, PIXEL_ANALISIS_M, SERVICIO_URL, Umbrales
 from .descarga import descargar_teselas, estimar_mb, filtrar_teselas, planificar_teselas
 from .estadisticas import estadisticas_local, estadisticas_servidor
 from .imageserver import ImageServer, ImageServerError, leer_mapa_bandas, mapa_de_bandas, regla_ndvi
-from .publicar import armar_visor, leer_capa, servir
+from .publicar import armar_visor, leer_capa, leer_manifiesto, servir
 from .salidas import armar_resultado, guardar
 from .validacion import validar
 from .zonas import cargar_zonas
@@ -72,9 +72,13 @@ def construir_parser():
                    help="guarda el raster de clases por tesela para revisarlo en QGIS (modo local)")
 
     s = sub.add_parser("visor", help="arma el visor web (MapLibre) con capas de indicadores")
-    s.add_argument("--capa", action="append", required=True, metavar="TITULO=RUTA.geojson",
-                   help="GeoJSON de `indicadores`; se puede repetir (barrios, colegios...)")
-    s.add_argument("--titulo", help="título del visor")
+    capas = s.add_mutually_exclusive_group(required=True)
+    capas.add_argument("--capa", action="append", metavar="TITULO=RUTA.geojson",
+                       help="GeoJSON de `indicadores`; se puede repetir (barrios, colegios...)")
+    capas.add_argument("--manifiesto", help="JSON con el título y las capas (ver sitio/)")
+    s.add_argument("--titulo", help="título del visor (reemplaza el del manifiesto)")
+    s.add_argument("--solo-datos-reales", action="store_true",
+                   help="falla si alguna capa es de la demo o no tiene .meta.json")
     s.add_argument("--salida", default="resultados/visor", help="carpeta lista para publicar")
     s.add_argument("--servir", type=int, nargs="?", const=8000, metavar="PUERTO",
                    help="sirve el visor en este puerto local (por defecto 8000)")
@@ -316,13 +320,15 @@ def ejecutar_demo(args):
 
 
 def ejecutar_visor(args):
-    capas = [leer_capa(c) for c in args.capa]
-    for _, ruta in capas:
-        if not ruta.exists():
-            raise ValueError(f"No existe {ruta}")
-    carpeta = armar_visor(capas, args.salida, args.titulo)
+    titulo = args.titulo
+    if args.manifiesto:
+        titulo_manifiesto, capas = leer_manifiesto(args.manifiesto)
+        titulo = titulo or titulo_manifiesto
+    else:
+        capas = [leer_capa(c) for c in args.capa]
+    carpeta = armar_visor(capas, args.salida, titulo, rechazar_demo=args.solo_datos_reales)
     print(f"Visor listo en {carpeta} ({len(capas)} capas).")
-    print("Publícalo como sitio estático (p. ej. Cloudflare Pages) o pruébalo con --servir.")
+    print("Publícalo como sitio estático (GitHub Pages: ver sitio/LEEME.md) o pruébalo con --servir.")
     if args.servir:
         servir(carpeta, args.servir)
     return 0

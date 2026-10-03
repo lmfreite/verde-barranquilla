@@ -42,15 +42,48 @@ def _validar_geojson(ruta):
         )
 
 
-def armar_visor(capas, salida, titulo=None):
+def leer_manifiesto(ruta):
+    """Lee un manifiesto del visor y devuelve (título, [(título, ruta), ...]).
+
+    Formato (rutas relativas al manifiesto):
+        {"titulo": "...", "capas": [{"titulo": "Barrios", "archivo": "barrios.geojson"}]}
+    """
+    ruta = Path(ruta)
+    try:
+        manifiesto = json.loads(ruta.read_text())
+    except (OSError, ValueError) as error:
+        raise ValueError(f"{ruta}: no pude leer el manifiesto ({error})")
+    capas = manifiesto.get("capas") or []
+    if not capas:
+        raise ValueError(f"{ruta}: el manifiesto no tiene capas")
+    resultado = []
+    for capa in capas:
+        if "archivo" not in capa:
+            raise ValueError(f"{ruta}: cada capa necesita 'archivo'")
+        archivo = ruta.parent / capa["archivo"]
+        resultado.append((capa.get("titulo") or archivo.stem, archivo))
+    return manifiesto.get("titulo"), resultado
+
+
+def armar_visor(capas, salida, titulo=None, rechazar_demo=False):
     """Copia el visor a `salida` y agrega las capas en `salida/datos/`.
 
     `capas` es una lista de (título, ruta al GeoJSON de `baqgeo indicadores`).
     Si junto al GeoJSON está su `.meta.json`, el visor muestra el método.
+    Con `rechazar_demo` falla si alguna capa viene de `baqgeo demo`, para no
+    publicar datos sintéticos como si fueran reales.
     """
     salida = Path(salida)
     for _, ruta in capas:
+        if not Path(ruta).exists():
+            raise ValueError(f"No existe {ruta}")
         _validar_geojson(ruta)
+        meta = ruta_metadatos(ruta)
+        if rechazar_demo:
+            if not meta.exists():
+                raise ValueError(f"{ruta}: falta {meta.name}; genera la capa con `baqgeo indicadores`")
+            if json.loads(meta.read_text()).get("demo"):
+                raise ValueError(f"{ruta}: son datos de demostración sintéticos, no se publican")
     salida.mkdir(parents=True, exist_ok=True)
     for archivo in WEB.iterdir():
         if archivo.is_file():

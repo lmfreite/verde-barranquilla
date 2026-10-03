@@ -175,11 +175,24 @@ Qué hace el visor:
 - Muestra el método (fecha, modo, umbral) desde el `.meta.json` que escribe
   `indicadores`, y un aviso cuando los datos son de demostración.
 
-Para publicarlo basta subir la carpeta a cualquier hosting estático, por ejemplo:
+### Publicar en GitHub Pages
 
-```bash
-npx wrangler pages deploy resultados/visor --project-name verde-barranquilla
-```
+El workflow `.github/workflows/visor-pages.yml` (en la raíz del repositorio)
+publica el visor cada vez que llega a `master` un cambio en `barranquilla-geo/`:
+
+1. Pon en `sitio/` los GeoJSON de `indicadores` con su `.meta.json` y un
+   `sitio/visor.json` (copia `sitio/visor.ejemplo.json`). Los pasos están en
+   [`sitio/LEEME.md`](sitio/LEEME.md).
+2. Una sola vez, en GitHub: **Settings → Pages → Source: GitHub Actions**.
+3. Sube a `master`. El sitio queda en `https://lmfreite.github.io/lf-Music/`.
+
+El workflow instala el paquete, corre
+`baqgeo visor --manifiesto sitio/visor.json --solo-datos-reales` y despliega el
+resultado. Si no existe `sitio/visor.json` no publica nada, y falla si alguna
+capa viene de la demo o no tiene `.meta.json`, para no publicar datos sintéticos.
+
+La carpeta que arma `baqgeo visor` sirve igual en cualquier otro hosting estático,
+por ejemplo `npx wrangler pages deploy resultados/visor --project-name verde-barranquilla`.
 
 Notas:
 
@@ -238,5 +251,6 @@ baqgeo/
   web/             visor estático: index.html, visor.css, visor.js (MapLibre)
   demo.py          escena sintética e ImageServer simulado (demo y pruebas)
   cli.py           comandos
+sitio/             capas y manifiesto que publica GitHub Pages (ver LEEME.md)
 tests/             pytest, sin red
 ```
